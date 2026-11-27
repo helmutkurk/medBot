@@ -1,0 +1,27 @@
+{
+  "name": "medbot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "eval": "node --env-file-if-exists=.env.local scripts/eval.ts",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "engines": { "node": ">=24" },
+  "dependencies": {
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "@types/react": "19.3.3",
+    "@types/react-dom": "19.3.0",
+    "@types/node": "26.6.11"
+  }
+}
