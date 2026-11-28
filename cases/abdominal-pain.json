@@ -87,9 +87,9 @@
     {
       "id": "severity",
       "category": "symptom",
-      "truth": "Pain intensity seven out of ten.",
-      "lay": "About seven out of ten.",
-      "reveal_when": "asked how severe it is or for a pain scale"
+      "truth": "Pain intensity seven out of ten now; this is the worst it has been.",
+      "lay": "About seven out of ten, and that is the worst it has been.",
+      "reveal_when": "asked how severe it is, for a pain scale, or how bad it has been at its worst"
     },
     {
       "id": "movement_worsening",
@@ -181,16 +181,9 @@
     {
       "id": "period_timing_usual",
       "category": "history",
-      "truth": "Last menstrual period occurred at the usual expected time.",
-      "lay": "It came when I expected it.",
-      "reveal_when": "Asked whether the last period was late, on time or normal, or about menstrual pattern. A timing-only question does not ask about usualness."
-    },
-    {
-      "id": "period_flow_usual",
-      "category": "history",
-      "truth": "Reports usual flow during the last menstrual period.",
-      "lay": "The bleeding was the usual amount for me.",
-      "reveal_when": "Asked about period flow or whether the last period was normal. A date-only question does not permit this."
+      "truth": "Last menstrual period occurred at the usual expected time with usual flow.",
+      "lay": "It came when I expected it, and the bleeding was the usual amount for me.",
+      "reveal_when": "Asked whether the last period was late, on time or normal, about menstrual pattern or flow. A timing-only question does not ask about usualness."
     },
     {
       "id": "sexual_activity",
@@ -199,6 +192,20 @@
       "lay": "I have not had sex in the last year.",
       "reveal_when": "Asked about sexual activity, sexual history, or whether pregnancy could be possible. A question only about the last period does not permit this; this history is not a pregnancy-test result.",
       "red_flag": true
+    },
+    {
+      "id": "no_contraception",
+      "category": "history",
+      "truth": "Is not using any contraception.",
+      "lay": "I am not using any contraception.",
+      "reveal_when": "Asked about contraception or the pill. A question only about the last period does not permit this."
+    },
+    {
+      "id": "pregnancy_unlikely",
+      "category": "history",
+      "truth": "Does not think she could be pregnant, given no sexual activity in the last year; no pregnancy test has been done.",
+      "lay": "I don't think I could be pregnant.",
+      "reveal_when": "Asked whether she could be pregnant or whether pregnancy is possible."
     },
     {
       "id": "no_vaginal_bleeding",
@@ -220,6 +227,13 @@
       "truth": "Reports no previous similar abdominal-pain episode.",
       "lay": "I have not had pain like this before.",
       "reveal_when": "Asked about similar episodes or whether this has happened before."
+    },
+    {
+      "id": "family_abdominal_history",
+      "category": "family",
+      "truth": "Knows of no abdominal or gynaecological problems in the family.",
+      "lay": "Not that I know of in my family.",
+      "reveal_when": "Asked about family health, or family history of abdominal, bowel or gynaecological problems."
     },
     {
       "id": "chronic_illness",
@@ -276,6 +290,13 @@
       "truth": "Drinks one glass of wine per week.",
       "lay": "I have one glass of wine a week.",
       "reveal_when": "asked about alcohol or drinking"
+    },
+    {
+      "id": "no_recreational_drugs",
+      "category": "lifestyle",
+      "truth": "Does not use recreational drugs.",
+      "lay": "I do not use any recreational drugs.",
+      "reveal_when": "Asked about recreational drugs or substance use. Asking about smoking or alcohol alone does not permit this."
     },
     {
       "id": "oral_fluids",

@@ -37,9 +37,9 @@
     {
       "id": "dizziness_character",
       "category": "symptom",
-      "truth": "Dizzy spells involve greying vision and feeling close to fainting.",
-      "lay": "Everything goes grey and I feel as if I might pass out.",
-      "reveal_when": "Asked what dizzy means, what the sensation is like, or whether the patient feels faint."
+      "truth": "Dizzy spells involve greying vision and feeling close to fainting; the greying is the only change in vision (no double vision or blurring).",
+      "lay": "Everything goes grey and I feel as if I might pass out. The greying is the only change in my vision.",
+      "reveal_when": "Asked what dizzy means, what the sensation is like, whether the patient feels faint, or about vision changes during a spell."
     },
     {
       "id": "sitting_relief",
@@ -49,12 +49,75 @@
       "reveal_when": "Asked what helps, whether sitting helps, or what stops a spell."
     },
     {
+      "id": "spell_onset_speed",
+      "category": "symptom",
+      "truth": "Dizzy spells come on within a few seconds of standing up.",
+      "lay": "It comes on within a few seconds of standing up.",
+      "reveal_when": "Asked how quickly the dizziness comes on, whether it is sudden or gradual, or how soon after standing it starts."
+    },
+    {
+      "id": "spell_duration",
+      "category": "symptom",
+      "truth": "Each spell lasts about a minute and settles within a couple of minutes of sitting down.",
+      "lay": "A spell lasts about a minute, and it settles in a couple of minutes once I sit.",
+      "reveal_when": "Asked how long a spell lasts, how long it takes to settle or recover, or how long before she feels steady again."
+    },
+    {
+      "id": "spell_frequency",
+      "category": "symptom",
+      "truth": "Has had several spells a day since they started two mornings ago, mostly on standing up.",
+      "lay": "I have had several spells a day since it started, mostly when I stand up.",
+      "reveal_when": "Asked how often the spells happen, how many there have been, or whether it happens every time she stands."
+    },
+    {
+      "id": "no_spell_chest_pain",
+      "category": "symptom",
+      "truth": "Reports no chest pain with the dizzy spells.",
+      "lay": "I have had no chest pain with the spells.",
+      "reveal_when": "Asked about other or accompanying symptoms with the dizzy spells, or specifically about chest pain."
+    },
+    {
+      "id": "no_spell_palpitations",
+      "category": "symptom",
+      "truth": "Reports no racing or irregular heartbeat with the dizzy spells.",
+      "lay": "My heart has not been racing or fluttering with the spells.",
+      "reveal_when": "Asked about other or accompanying symptoms with the dizzy spells, or specifically about palpitations, a racing or fluttering heartbeat."
+    },
+    {
+      "id": "no_spell_breathlessness",
+      "category": "symptom",
+      "truth": "Reports no shortness of breath with the dizzy spells.",
+      "lay": "I have not been short of breath with the spells.",
+      "reveal_when": "Asked about other or accompanying symptoms with the dizzy spells, or specifically about breathlessness or shortness of breath."
+    },
+    {
+      "id": "no_spell_sweating",
+      "category": "symptom",
+      "truth": "Reports no sweating with the dizzy spells.",
+      "lay": "I have not been sweating with the spells.",
+      "reveal_when": "Asked about other or accompanying symptoms with the dizzy spells, or specifically about sweating."
+    },
+    {
+      "id": "no_prior_spells",
+      "category": "history",
+      "truth": "Had no similar dizzy spells and no falls before the last two days.",
+      "lay": "I never had spells like this before, and I have not fallen before.",
+      "reveal_when": "Asked about previous dizzy spells, fainting or falls, or whether this has happened before."
+    },
+    {
       "id": "head_impact",
       "category": "symptom",
       "truth": "Struck the back of the head against a cupboard in the fall.",
       "lay": "I hit the back of my head on the cupboard when I fell.",
       "reveal_when": "Asked whether the head was hit, what was injured, what was hit, or for a detailed account of the fall beyond the presenting complaint. This does not ask about medicines.",
       "red_flag": true
+    },
+    {
+      "id": "head_site_no_bleeding",
+      "category": "symptom",
+      "truth": "Noticed no blood or cut at the back of the head; the spot is a little sore.",
+      "lay": "I did not see any blood. The back of my head is a bit sore.",
+      "reveal_when": "Asked about bleeding, a cut, bruising or pain where the head was hit, or how the head feels now."
     },
     {
       "id": "no_loss_of_consciousness",
@@ -138,23 +201,9 @@
     {
       "id": "pill_organiser",
       "category": "medication",
-      "truth": "Fills a weekly pill organiser independently.",
-      "lay": "I fill my weekly pill box myself.",
-      "reveal_when": "Asked how medicines are organised, who manages them, or whether help is needed with tablets."
-    },
-    {
-      "id": "no_extra_doses",
-      "category": "medication",
-      "truth": "Reports no extra medication doses this week.",
-      "lay": "I have not taken any extra doses this week.",
-      "reveal_when": "Asked about extra doses, dosing mistakes, or how reliably medicines have been taken."
-    },
-    {
-      "id": "no_missed_doses",
-      "category": "medication",
-      "truth": "Reports no missed medication doses this week.",
-      "lay": "I have not missed any doses this week.",
-      "reveal_when": "Asked about missed doses, dosing mistakes, or how reliably medicines have been taken."
+      "truth": "Fills a weekly pill organiser independently; reports no missed doses and no extra doses this week.",
+      "lay": "I fill my weekly pill box myself. I have not missed any doses or taken any extra this week.",
+      "reveal_when": "Asked how medicines are organised, who manages them, whether help is needed with tablets, about missed or extra doses, dosing mistakes, or how reliably medicines have been taken."
     },
     {
       "id": "apixaban_last_dose",
@@ -174,30 +223,16 @@
     {
       "id": "home_arrangement",
       "category": "social",
-      "truth": "Lives alone in a ground-floor flat.",
-      "lay": "I live on my own in a ground-floor flat.",
-      "reveal_when": "Asked who lives with the patient, about the home, stairs at home, or support arrangements."
+      "truth": "Lives alone in a ground-floor flat; her daughter visits weekly.",
+      "lay": "I live on my own in a ground-floor flat. My daughter visits once a week.",
+      "reveal_when": "Asked who lives with the patient, about the home, stairs at home, help at home, visitors or support arrangements."
     },
     {
-      "id": "daughter_support",
+      "id": "baseline_mobility",
       "category": "social",
-      "truth": "Daughter visits weekly.",
-      "lay": "My daughter visits once a week.",
-      "reveal_when": "Asked about help at home, visitors or family support. Asking only whether the patient lives alone does not request visit frequency."
-    },
-    {
-      "id": "indoor_mobility",
-      "category": "social",
-      "truth": "Usually walks independently indoors.",
-      "lay": "I normally walk around the flat by myself.",
-      "reveal_when": "Asked about baseline walking, indoor mobility, independence or daily function before this illness."
-    },
-    {
-      "id": "outdoor_mobility",
-      "category": "social",
-      "truth": "Usually uses a stick outdoors.",
-      "lay": "I normally take a stick when I go out.",
-      "reveal_when": "Asked about baseline walking, walking aids, outdoor mobility or independence before this illness."
+      "truth": "Usually walks independently indoors and uses a stick outdoors.",
+      "lay": "I normally walk around the flat by myself, and I take a stick when I go out.",
+      "reveal_when": "Asked about baseline walking, indoor or outdoor mobility, walking aids or independence before this illness."
     },
     {
       "id": "family_history",
@@ -230,51 +265,44 @@
     {
       "id": "time_on_floor",
       "category": "history",
-      "truth": "Estimates spending five minutes on the floor after the fall.",
-      "lay": "I think I was on the floor for about five minutes.",
-      "reveal_when": "Asked how long the patient was on the floor or how long before getting up."
-    },
-    {
-      "id": "getting_up",
-      "category": "history",
-      "truth": "Got up using a kitchen chair for support.",
-      "lay": "I used a kitchen chair to help myself up.",
-      "reveal_when": "Asked how the patient got up, whether help was needed, or what happened immediately after the fall."
+      "truth": "Estimates spending five minutes on the floor after the fall, then got up using a kitchen chair for support.",
+      "lay": "I think I was on the floor for about five minutes, then I used a kitchen chair to help myself up.",
+      "reveal_when": "Asked how long the patient was on the floor, how long before getting up, how she got up, whether help was needed, or what happened immediately after the fall."
     },
     {
       "id": "no_post_fall_headache",
       "category": "symptom",
       "truth": "Reports no headache since the fall.",
       "lay": "I have not had a headache since the fall.",
-      "reveal_when": "Asked about headache after the fall, or a broad question about new symptoms since the fall. Answer only the requested symptom(s); these are patient reports, not examination findings."
+      "reveal_when": "Asked about new symptoms since or after the fall or head injury, or asked specifically about headache. A broad question about other symptoms with the dizziness or the dizzy spells does not permit this. Answer only the requested symptom(s); these are patient reports, not examination findings."
     },
     {
       "id": "no_post_fall_vomiting",
       "category": "symptom",
       "truth": "Reports no vomiting since the fall.",
       "lay": "I have not thrown up since the fall.",
-      "reveal_when": "Asked about vomiting or being sick after the fall, or a broad question about new symptoms since the fall. Answer only the requested symptom(s); these are patient reports, not examination findings."
+      "reveal_when": "Asked about new symptoms since or after the fall or head injury, or asked specifically about vomiting or being sick. A broad question about other symptoms with the dizziness or the dizzy spells does not permit this. Answer only the requested symptom(s); these are patient reports, not examination findings."
     },
     {
       "id": "no_post_fall_confusion",
       "category": "symptom",
       "truth": "Reports no confusion since the fall.",
       "lay": "I have not felt confused since the fall.",
-      "reveal_when": "Asked about confusion or memory changes after the fall, or a broad question about new symptoms since the fall. Answer only the requested symptom(s); these are patient reports, not examination findings."
+      "reveal_when": "Asked about new symptoms since or after the fall or head injury, or asked specifically about confusion or memory changes. A broad question about other symptoms with the dizziness or the dizzy spells does not permit this. Answer only the requested symptom(s); these are patient reports, not examination findings."
     },
     {
       "id": "no_post_fall_drowsiness",
       "category": "symptom",
       "truth": "Reports no unusual drowsiness since the fall.",
       "lay": "I have not felt unusually sleepy since the fall.",
-      "reveal_when": "Asked about unusual sleepiness or drowsiness after the fall, or a broad question about new symptoms since the fall. Answer only the requested symptom(s); these are patient reports, not examination findings."
+      "reveal_when": "Asked about new symptoms since or after the fall or head injury, or asked specifically about unusual sleepiness or drowsiness. A broad question about other symptoms with the dizziness or the dizzy spells does not permit this. Answer only the requested symptom(s); these are patient reports, not examination findings."
     },
     {
       "id": "no_post_fall_weakness",
       "category": "symptom",
       "truth": "Reports no new limb weakness since the fall.",
       "lay": "I have not noticed any new weakness in my arms or legs since the fall.",
-      "reveal_when": "Asked about new weakness after the fall, or a broad question about new symptoms since the fall. Answer only the requested symptom(s); these are patient reports, not examination findings."
+      "reveal_when": "Asked about new symptoms since or after the fall or head injury, or asked specifically about new weakness. A broad question about other symptoms with the dizziness or the dizzy spells does not permit this. Answer only the requested symptom(s); these are patient reports, not examination findings."
     },
     {
       "id": "patient_idea",
@@ -309,26 +337,28 @@
     {
       "id": "stoic",
       "label": "Stoic",
-      "style": "Stoic and protective of independence: short direct answers, an occasional dry remark about inconvenience. Accepts specific help when discussed, without pretending there is no limitation. A question about safety receives the full requested answer. Direct questions receive complete, accurate answers regardless of personality. Do not volunteer unasked facts. Use perspective facts only when their reveal conditions are met; never add symptoms or change pain scores. Acknowledgement may change warmth, never physical symptoms. On interruption, stop and answer the resumed question; on repetition, repeat the same content. ",
-      "emotion": "Proud and composed, with slow firm delivery and a short pause before discussing dependence. Contained emotion, never dismissal of the head impact.",
+      "style": "Stoic and protective of independence: very few words, usually one short sentence, no asides or small talk, flat tone. Prefers to manage alone and finds fuss unnecessary ('I can manage', 'No need to fuss'). Accepts specific help when discussed, without pretending there is no limitation. A question about safety receives the full requested answer. Direct questions receive complete, accurate answers regardless of personality. Do not volunteer unasked facts. Use perspective facts only when their reveal conditions are met; never add symptoms or change pain scores. Acknowledgement may change warmth, never physical symptoms. On interruption, stop and answer the resumed question; on repetition, repeat the same content. ",
+      "emotion": "Proud, reserved and composed; slow, firm, quiet delivery and a short pause before discussing dependence. Contained emotion, never dismissal of the head impact. Does not warm into conversation.",
       "voice": "sage",
       "opening_line": "I felt dizzy this morning and ended up on the kitchen floor.",
       "example_lines": [
-        "All right. Ask what you need to ask.",
-        "I would like to speak for myself, please.",
-        "One question at a time suits me."
+        "I can manage.",
+        "No need to fuss.",
+        "Next question.",
+        "I would rather do it myself."
       ]
     },
     {
       "id": "chatty",
       "label": "Chatty",
-      "style": "Warm and sociable: answer the requested medical question first, then at most one brief nonmedical aside about sewing or the radio. Follow redirection promptly. Use varied everyday wording, with no invented anecdote or life event. Direct questions receive complete, accurate answers regardless of personality. Do not volunteer unasked facts. Use perspective facts only when their reveal conditions are met; never add symptoms or change pain scores. Acknowledgement may change warmth, never physical symptoms. On interruption, stop and answer the resumed question; on repetition, repeat the same content. ",
-      "emotion": "Welcoming and animated, easy conversational rhythm with gentle laughter and little storytelling pauses. This person enjoys company and should sound sociable rather than alarmed.",
+      "style": "Warm, talkative and sociable: answers the medical question first, then usually adds one or two friendly nonmedical asides about sewing, her pattern notebook, the afternoon radio or the company, in longer flowing sentences with 'dear' or 'you know'. Enjoys the conversation and thanks the student warmly. Follows redirection promptly. Use varied everyday wording, with no invented anecdote or life event and no extra medical content in the asides. Direct questions receive complete, accurate answers regardless of personality. Do not volunteer unasked facts. Use perspective facts only when their reveal conditions are met; never add symptoms or change pain scores. Acknowledgement may change warmth, never physical symptoms. On interruption, stop and answer the resumed question; on repetition, repeat the same content. ",
+      "emotion": "Welcoming, animated and cheerful: fast easy rhythm, gentle laughter and little storytelling pauses. Sociable rather than alarmed, and never terse.",
       "voice": "coral",
-      "opening_line": "Oh, hello. I felt dizzy this morning and ended up on the kitchen floor.",
+      "opening_line": "Oh, hello dear, thank you for seeing me. I felt dizzy this morning and ended up on the kitchen floor, can you imagine?",
       "example_lines": [
-        "There I go with the sewing again. Back to your question.",
-        "Of course, let us take that bit first.",
+        "Oh, that reminds me of my sewing, but never mind, back to your question.",
+        "What a lovely thing to ask, dear.",
+        "I do like a good chat, you know. The radio is such good company.",
         "Thank you for listening. Now, what was the next bit?"
       ]
     }
