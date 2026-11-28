@@ -6,17 +6,17 @@
 .badge { display: flex; align-items: center; gap: var(--s2); font-size: var(--t-xs); font-weight: 550; padding: var(--s1) var(--s2) var(--s1) 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; min-height: 32px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .badge .dot { background: var(--accent); }
-.main { max-width: 1160px; padding: 0 var(--s5); margin: auto; }
+.main { width: 100%; min-width: 0; overflow-wrap: anywhere; max-width: 1160px; padding: 0 var(--s5); margin: auto; }
 .intro { padding: var(--s6) 0 var(--s5); }
 .eyebrow { font-size: var(--t-xs); letter-spacing: .12em; text-transform: uppercase; font-weight: 650; color: var(--accent); }
-.intro h1 { font-size: clamp(32px, 4.2vw, 48px); letter-spacing: -.04em; line-height: 1.1; font-weight: 650; margin: var(--s2) 0 var(--s3); }
+.intro h1 { font-size: clamp(28px, 4.2vw + 12px, 48px); overflow-wrap: anywhere; letter-spacing: -.04em; line-height: 1.1; font-weight: 650; margin: var(--s2) 0 var(--s3); }
 .intro p { color: var(--muted); font-size: var(--t-md); }
-.sectionTitle { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.sectionTitle { flex-wrap: wrap; display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
 .sectionTitle h2 { font-size: var(--t-md); letter-spacing: -.01em; font-weight: 650; }
 .sectionTitle > span { color: var(--muted); font-size: var(--t-xs); }
 .setup { margin-bottom: var(--s4); }
-.caseGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--s3); margin: var(--s3) 0; }
-.caseCard { display: flex; gap: var(--s3); align-items: center; text-align: left; background: var(--surface); border: 1px solid var(--border); padding: var(--s3) var(--s4); border-radius: var(--r-lg); box-shadow: var(--shadow); }
+.caseGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--s3); margin: var(--s3) 0; }
+.caseCard { min-width: 0; display: flex; gap: var(--s3); align-items: center; text-align: left; background: var(--surface); border: 1px solid var(--border); padding: var(--s3) var(--s4); border-radius: var(--r-lg); box-shadow: var(--shadow); }
 .caseCard:not(:disabled):hover { transform: translateY(-2px); }
 .caseCard:disabled { opacity: .7; }
 .caseCard.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); opacity: 1; }
@@ -33,7 +33,7 @@
 .segmented button { border: 0; border-radius: 9px; background: transparent; padding: var(--s1) var(--s3); min-height: 32px; font-size: var(--t-sm); }
 .segmented button[aria-pressed="true"] { background: var(--surface); box-shadow: 0 1px 4px #0002; opacity: 1; font-weight: 550; }
 .workspace { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--s4); align-items: start; }
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: var(--s4); }
+.card { min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: var(--s4); }
 .interview { min-width: 0; }
 
 /* Patient card */
@@ -42,7 +42,7 @@
 .patientInfo strong { font-size: var(--t-md); letter-spacing: -.01em; }
 .patientInfo span { font-size: var(--t-sm); color: var(--muted); }
 .state { display: inline-flex; align-items: center; gap: var(--s2); min-height: 32px; padding: 0 12px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); font-size: var(--t-xs); font-weight: 600; color: var(--muted); white-space: nowrap; }
-.stateDot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.stateDot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .toneLive { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
 .toneSpeaking { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
 .toneSpeaking .stateDot { animation: blink 1s ease-in-out infinite; }
@@ -89,7 +89,7 @@
 .secondary { border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-md); padding: var(--s1) var(--s3); min-height: 40px; font-size: var(--t-sm); font-weight: 600; }
 .secondary:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
 
-.sidebar { display: flex; flex-direction: column; gap: var(--s3); }
+.sidebar { min-width: 0; display: flex; flex-direction: column; gap: var(--s3); }
 .subtle { font-size: var(--t-sm); color: var(--muted); margin: var(--s2) 0 var(--s3); }
 .sectionTitle .count { color: var(--accent); font-size: var(--t-sm); font-weight: 650; font-variant-numeric: tabular-nums; }
 .progress { width: 100%; height: 6px; border: 0; border-radius: 3px; background: var(--border); accent-color: var(--accent); display: block; overflow: hidden; }
@@ -124,16 +124,15 @@
 .footer p { width: 100%; }
 
 @media (max-width: 850px) { .workspace { grid-template-columns: minmax(0, 1fr) 272px; gap: var(--s3); } .card { padding: var(--s3) var(--s3); } .main, .headerInner { padding-left: var(--s4); padding-right: var(--s4); } }
-@media (max-width: 700px) { .workspace { grid-template-columns: 1fr; } .sidebar { display: grid; grid-template-columns: 1fr 1fr; align-items: start; } .intro { padding-top: var(--s5); } }
+@media (max-width: 700px) { .workspace { grid-template-columns: minmax(0, 1fr); } .sidebar { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } .intro { padding-top: var(--s5); } }
 @media (max-width: 460px) {
   .main, .headerInner { padding-left: var(--s3); padding-right: var(--s3); }
   .headerInner { padding-top: 12px; padding-bottom: 12px; gap: var(--s2); }
   .wordmark { font-size: 20px; }
   .badge { font-size: var(--t-xs); padding-left: var(--s2); }
-  .sidebar { grid-template-columns: 1fr; }
-  .intro h1 { font-size: 32px; }
+  .sidebar { grid-template-columns: minmax(0, 1fr); }
   .intro p { font-size: var(--t-base); }
-  .caseGrid { grid-template-columns: 1fr; }
+  .caseGrid { grid-template-columns: minmax(0, 1fr); }
   .patientCard { flex-wrap: wrap; }
   .state { margin-left: 72px; }
   .orbArea { padding-top: var(--s4); }
@@ -168,9 +167,9 @@
 .goals { padding-left: var(--s4); margin: var(--s3) 0; display: grid; gap: var(--s2); }
 .toggle { display: flex; align-items: center; gap: var(--s2); min-height: 44px; font-weight: 600; }
 .toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
-.reflection { display: grid; gap: var(--s3); max-width: 640px; }
-.reflection label { display: grid; gap: var(--s2); }
-.reflection input, .reflection select { width: 100%; min-height: 44px; padding: var(--s2); font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); }
+.reflection { min-width: 0; display: grid; gap: var(--s3); max-width: 640px; }
+.reflection label { min-width: 0; display: grid; gap: var(--s2); }
+.reflection input, .reflection select { min-width: 0; width: 100%; min-height: 44px; padding: var(--s2); font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); }
 @media (max-width: 460px) { .headerInner { flex-wrap: wrap; } .headerNav { justify-content: flex-start; } }
 .learningExport { min-height: 44px; padding: var(--s2); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--accent); font-weight: 600; }
 .reflection button { min-height: 44px; }
@@ -178,7 +177,7 @@
 
 /* UX pass: hero, step indicator, patient cards, states */
 .hero { padding: var(--s5) 0 var(--s4); max-width: 720px; }
-.hero h1 { font-size: clamp(32px, 4.2vw, 48px); letter-spacing: -.04em; line-height: 1.1; font-weight: 650; margin: var(--s2) 0 var(--s3); }
+.hero h1 { font-size: clamp(28px, 4.2vw + 12px, 48px); overflow-wrap: anywhere; letter-spacing: -.04em; line-height: 1.1; font-weight: 650; margin: var(--s2) 0 var(--s3); }
 .hero p { color: var(--muted); font-size: var(--t-md); }
 .heroActions { display: flex; gap: var(--s3); flex-wrap: wrap; margin-top: var(--s4); }
 .hero .heroNote { margin-top: var(--s3); font-size: var(--t-sm); }
@@ -195,14 +194,14 @@ a.secondary { display: inline-flex; align-items: center; justify-content: center
 .chips { display: flex; gap: var(--s1); flex-wrap: wrap; margin-top: var(--s2); }
 .chip { display: inline-flex; align-items: center; font-size: var(--t-xs); font-weight: 550; padding: 2px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); }
 .caseCard.selected { background: var(--accent-soft); }
-.compact { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); margin: var(--s4) 0; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); }
+.compact { flex-wrap: wrap; display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); margin: var(--s4) 0; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); }
 .compact .patientInfo { flex: 1; }
 .compact .avatar { width: 40px; height: 40px; }
 .connecting { margin-top: var(--s2); width: 160px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--border) 0 30%, var(--accent) 30% 60%, var(--border) 60%); background-size: 200% 100%; animation: slide 1.2s linear infinite; }
 @keyframes slide { to { background-position: -200% 0; } }
 .recover { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s2); font-size: var(--t-sm); color: var(--warn); background: var(--warn-soft); border-radius: var(--r-md); padding: var(--s1) var(--s3); flex-wrap: wrap; justify-content: center; }
 .notice { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
-.notice > span { flex: 1 1 200px; }
+.notice > span { min-width: 0; flex: 1 1 200px; }
 .orbArea .ghost { margin-top: var(--s2); min-height: 44px; font-size: var(--t-sm); }
 .composer:focus-within { box-shadow: 0 0 0 3px var(--accent-soft); }
 .instructorCard { border-style: dashed; }
@@ -223,12 +222,20 @@ a.secondary { display: inline-flex; align-items: center; justify-content: center
 @media (max-width: 460px) { .main { padding-bottom: var(--s4); } }
 @media (max-width: 600px) { .badge { display: none; } }
 
-.modePicker { border: 0; padding: 0; margin: 24px 0; }
-.modePicker legend { font-weight: 700; margin-bottom: 12px; }
-.modeOptions { display: flex; flex-wrap: wrap; gap: 8px; }
-.modeOptions button { min-height: 44px; flex: 1 1 180px; text-align: left; white-space: normal; }
-.modeOptions small { display: block; font-weight: 400; margin-top: 8px; }
+.modePicker { min-width: 0; max-width: 100%; border: 0; padding: 0; margin: 24px 0; }
+.modePicker legend { max-width: 100%; font-weight: 700; margin-bottom: 12px; }
+.modeOptions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); }
+.modeOptions button { min-width: 0; min-height: 44px; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: var(--s2); padding: 12px var(--s3); font-size: var(--t-sm); text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.modeOptions small { display: block; font-size: var(--t-xs); font-weight: 400; }
 .clock { display: flex; gap: 16px; flex-wrap: wrap; padding: 16px; border: 1px solid currentColor; border-radius: 12px; margin: 16px 0; }
 .replay { padding-left: 24px; }
 .replay li { padding: 16px 0; border-bottom: 1px solid var(--border, #ddd); overflow-wrap: anywhere; }
-.reflection textarea { width: 100%; max-width: 100%; min-height: 120px; font: inherit; padding: 12px; border-radius: 8px; border: 1px solid var(--border, #777); background: var(--surface, white); color: inherit; }
+.reflection textarea { min-width: 0; resize: vertical; width: 100%; max-width: 100%; min-height: 120px; font: inherit; padding: 12px; border-radius: 8px; border: 1px solid var(--border, #777); background: var(--surface, white); color: inherit; }
+
+@media (width < 640px) {
+  .modeOptions { grid-template-columns: minmax(0, 1fr); }
+  .heroActions > *, .nextActions > *, .reflection button { width: 100%; }
+  .primary, .secondary, .ghost, .segmented, .patientInfo, .latency, .chip { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+  .primary, .secondary, .ghost { white-space: normal; }
+  .state { max-width: 100%; margin-left: 0; white-space: normal; }
+}

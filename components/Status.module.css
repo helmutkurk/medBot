@@ -1,4 +1,4 @@
-.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 6px; border-radius: 999px; font-size: var(--t-xs); font-weight: 600; line-height: 1.5; white-space: nowrap; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 6px; border-radius: 999px; font-size: var(--t-xs); font-weight: 600; line-height: 1.5; min-width: 0; max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
 .icon { flex-shrink: 0; }
 .found { color: var(--found); background: var(--found-soft); }
 .missed { color: var(--missed); background: var(--missed-soft); }
