@@ -5,7 +5,7 @@ import type { FormEvent } from "react";
 import type { InterviewCase } from "./types.ts";
 import styles from "./CaseCreator.module.css";
 
-export function CaseCreator({ onClose, onCreated }: { onClose: () => void; onCreated: (c: InterviewCase) => void }) {
+export function CaseCreator({ onClose, onCreated, focus }: { onClose: () => void; onCreated: (c: InterviewCase) => void; focus?: string[] }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const pending = useRef(false);
   const request = useRef<AbortController | null>(null);
@@ -30,7 +30,7 @@ export function CaseCreator({ onClose, onCreated }: { onClose: () => void; onCre
     try {
       const response = await fetch("/api/cases/generate", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ diagnosis, age: optional("age") ? Number(fields.get("age")) : undefined, sex: optional("sex"), setting: optional("setting"), personalityHints: optional("personalityHints") }),
+        body: JSON.stringify({ focus, diagnosis, age: optional("age") ? Number(fields.get("age")) : undefined, sex: optional("sex"), setting: optional("setting"), personalityHints: optional("personalityHints") }),
         signal: AbortSignal.any([request.current.signal, AbortSignal.timeout(50_000)]),
       });
       const value = await response.json();
@@ -45,6 +45,7 @@ export function CaseCreator({ onClose, onCreated }: { onClose: () => void; onCre
     <form onSubmit={event => void submit(event)}>
       <div className={styles.heading}><h2 id="creator-title">A new patient</h2><button type="button" className={styles.close} aria-label="Close case creator" disabled={busy} onClick={onClose}>×</button></div>
       <p className={styles.muted}>Create a synthetic teaching case with two contrasting personalities. Use fictional details only.</p>
+      {focus?.length ? <p className={styles.muted}>Practice focus: {focus.join(", ")}</p> : null}
       <fieldset disabled={busy} className={styles.fields}>
         <label>Diagnosis<input name="diagnosis" required minLength={3} maxLength={200} placeholder="e.g. Migraine" autoFocus /></label>
         <div className={styles.row}><label>Age <span>(optional)</span><input name="age" type="number" min={0} max={120} step={1} placeholder="45" /></label><label>Sex <span>(optional)</span><select name="sex" defaultValue=""><option value="">Any</option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option></select></label></div>

@@ -1,3 +1,4 @@
+import { communicationSkills } from "../lib/case/types.ts";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -37,7 +38,7 @@ for (const failureCount of [0, 1, 2]) {
       patient_turn: { reply: "Hello.", revealed: [] },
       guard_result: { ok: failureCount !== 1, issues: failureCount === 1 ? [{ type: "invented", detail: "Unsupported detail." }] : [], mode: "openai" },
       personality_guess: { personality_id: "downplaying" },
-      coach_report: { strengths: [], improvements: [], quotes: [], suggestions: [] },
+      coach_report: { strengths: [], improvements: [], quotes: [], suggestions: [], communication: Object.fromEntries(communicationSkills.map(skill => [skill, { score: 0, evidence: "", tip: "Practise this skill explicitly." }])) },
       anamnesis_report: { note: "Not documented.", documented: [] },
     };
     const results = path.join(directory, "eval", "results");

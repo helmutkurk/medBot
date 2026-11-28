@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
+import { communicationSkills } from "../lib/case/types.ts";
+import { emptyProfile, difficultyFor, recommendNext, updateProfile } from "../lib/engine/learner.ts";
+import type { LearnerProfile, SessionResult } from "../lib/engine/learner.ts";
+import { loadProfile, persistProfile } from "./learner-storage.ts";
 import type { ChatMessage, GuardResult, PatientTurn } from "../lib/case/types.ts";
 import type { Health, InterviewCase } from "./types.ts";
 import { AnamnesisPanel } from "./AnamnesisPanel.tsx";
@@ -39,7 +43,7 @@ async function post<T>(path: string, data: unknown, signal: AbortSignal): Promis
 
 export function Interview({ cases, health }: { cases: InterviewCase[]; health: Health }) {
   if (!health.ready) return <>
-    <header className={styles.header}><div className={styles.headerInner}><a className={styles.wordmark} href="/">medBot</a><nav aria-label="Main"><a href="/eval" className={styles.evidenceLink}>Eval</a><a href="/usage" className={styles.evidenceLink}>Usage</a></nav></div></header>
+    <header className={styles.header}><div className={styles.headerInner}><a className={styles.wordmark} href="/">medBot</a><nav aria-label="Main"><a href="/learning" className={styles.evidenceLink}>Your learning</a><a href="/eval" className={styles.evidenceLink}>Eval</a><a href="/usage" className={styles.evidenceLink}>Usage</a></nav></div></header>
     <main className={styles.main}>
       <section className={`${styles.card} ${styles.setupCard}`} aria-labelledby="setup-title">
         <span className={styles.eyebrow}>Get started</span>
@@ -58,6 +62,16 @@ export function Interview({ cases, health }: { cases: InterviewCase[]; health: H
 
 function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
   const [cases, setCases] = useState(initialCases);
+  const [profile, setProfile] = useState<LearnerProfile>(emptyProfile);
+  const [persistent, setPersistent] = useState(true);
+  const [instructor, setInstructor] = useState(false);
+  const [reflection, setReflection] = useState<SessionResult | null>(null);
+  const reflectionRef = useRef<SessionResult | null>(null);
+  const profileRef = useRef<LearnerProfile>(profile);
+  const storedOutcome = useRef(false);
+  const [concern, setConcern] = useState("");
+  const [confidence, setConfidence] = useState(3);
+  const [goals, setGoals] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [caseId, setCaseId] = useState(cases[0]?.id ?? "");
   const selected = cases.find(c => c.id === caseId);
@@ -119,7 +133,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     if (!history.length) { setCoach({ status: "idle" }); return; }
     setCoach({ status: "loading" });
     try {
-      const report = await post<CoachReport>("/api/coach", { caseId, history, revealed: [...revealedRef.current] }, controller().signal);
+      const report = await post<CoachReport>("/api/coach", { caseId, history, revealed: [...revealedRef.current], focus: goals }, controller().signal);
       if (token === generation.current) setCoach({ status: "ready", report });
     } catch (error) {
       if (token === generation.current && !controller().signal.aborted) setCoach({ status: "error", message: error instanceof Error ? error.message : "The coach report could not be created." });
@@ -169,12 +183,46 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     setTimings([]);
     setHint("");
     setEnded(false);
+    setReflection(null);
+    reflectionRef.current = null;
+    storedOutcome.current = false;
+    setConcern("");
+    setConfidence(3);
+    setInstructor(false);
+    setGoals(selected ? recommendNext(profileRef.current, [selected], new Date().toISOString())!.goals : []);
     setActive(null);
     setBusy(false);
     sending.current = false;
     setGuardPending(0);
     setStatus("Listening");
   }
+
+  useEffect(() => {
+    const loaded = loadProfile();
+    profileRef.current = loaded.profile;
+    setProfile(loaded.profile);
+    setPersistent(loaded.persistent);
+    const recommendation = recommendNext(loaded.profile, initialCases, new Date().toISOString());
+    const query = new URLSearchParams(window.location.search);
+    const requested = initialCases.find(c => c.id === query.get("case"));
+    const chosen = requested ?? initialCases.find(c => c.id === recommendation?.caseId);
+    if (chosen) {
+      setCaseId(chosen.id);
+      const requestedPersonality = chosen.personalities.find(p => p.id === query.get("personality"));
+      setPersonalityId(requestedPersonality?.id ?? chosen.personalities.find(p => p.id === recommendation?.personalityId)?.id ?? chosen.personalities[0]?.id ?? "");
+    }
+    setGoals(chosen ? recommendNext(loaded.profile, [chosen], new Date().toISOString())!.goals : []);
+  }, [initialCases]);
+
+  useEffect(() => {
+    if (!reflection || coach.status !== "ready" || !selected || storedOutcome.current) return;
+    storedOutcome.current = true;
+    saveSession({ ...reflection, outcome: {
+      score: coach.report.score, coverage: coach.report.coverage,
+      communication: Object.fromEntries(communicationSkills.map(skill => [skill, coach.report.communication[skill].score])) as Record<typeof communicationSkills[number], number>,
+      redFlags: selected.facts.filter(f => f.redFlag).map(f => ({ factId: f.id, label: coach.report.missed.find(m => m.factId === f.id)?.label ?? coach.report.covered.find(c => c.factId === f.id)?.label ?? f.id, found: revealed.has(f.id) })),
+    } });
+  }, [reflection, coach, selected, revealed]);
 
   useEffect(() => () => {
     generation.current += 1;
@@ -187,6 +235,18 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     const element = transcript.current;
     if (element) element.scrollTop = element.scrollHeight;
   }, [messages, busy]);
+
+  useEffect(() => {
+    if (ended) document.getElementById("concern")?.focus();
+  }, [ended]);
+
+  function chooseCase(c: InterviewCase): void {
+    clearInterview();
+    const next = recommendNext(profileRef.current, [c], new Date().toISOString());
+    setCaseId(c.id);
+    setPersonalityId(next?.personalityId ?? c.personalities[0]?.id ?? "");
+    setGoals(next?.goals ?? []);
+  }
 
   function toggleInterview(): void {
     if (active) {
@@ -201,6 +261,23 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     voice.current = null;
     setActive(null);
     setEnded(true);
+    // Reflection must precede feedback to preserve an independent self-assessment.
+  }
+
+  function saveSession(result: SessionResult): void {
+    const next = updateProfile(loadProfile().profile, result);
+    profileRef.current = next;
+    setProfile(next);
+    setPersistent(persistProfile(next));
+  }
+
+  function submitReflection(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    if (!concern.trim() || reflectionRef.current || !selected) return;
+    const result: SessionResult = { id: crypto.randomUUID(), caseId, personalityId, completedAt: new Date().toISOString(), reflection: { concern: concern.trim(), confidence } };
+    reflectionRef.current = result;
+    setReflection(result);
+    saveSession(result);
     void loadCoach(generation.current);
     void loadAnamnesis(generation.current);
   }
@@ -218,6 +295,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
       revealedFactIds: [...revealed],
       latencies: timings.map(({ kind, ms }) => ({ kind, ms: Math.round(ms) })),
       guardWarnings: warnings,
+      reflection: reflection?.reflection ?? null,
       coachReport: coach.status === "ready" ? coach.report : null,
       anamnesis: anamnesis.status === "ready" ? anamnesis.report : null,
       anamnesisStatus: anamnesis.status,
@@ -311,7 +389,8 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
   const currentTimings = timings.filter(timing => timing.kind === timingKind).map(timing => timing.ms);
   const typical = median(currentTimings);
   const last = currentTimings.at(-1);
-  const locked = Boolean(active) || busy;
+  const awaitingFeedback = ended && (!reflection || coach.status === "loading" || anamnesis.status === "loading");
+  const locked = Boolean(active) || busy || awaitingFeedback;
   const categories = [...new Set(selected?.facts.map(f => f.category) ?? [])];
   const badge = active === "text" ? "Text · OpenAI" : "Voice ready";
   const personality = selected?.personalities.find(p => p.id === personalityId);
@@ -327,14 +406,14 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
   return <>
     <header className={styles.header}><div className={styles.headerInner}>
       <a className={styles.wordmark} href="/" aria-label="medBot home"><span className={styles.logo} aria-hidden="true">m</span>medBot</a>
-      <nav className={styles.headerNav} aria-label="Main"><a href="/eval" className={styles.evidenceLink}>Eval</a><a href="/usage" className={styles.evidenceLink}>Usage</a><span className={styles.badge}><span className={styles.dot} />{badge}</span></nav>
+      <nav className={styles.headerNav} aria-label="Main"><a href="/learning" className={styles.evidenceLink}>Your learning</a><a href="/eval" className={styles.evidenceLink}>Eval</a><a href="/usage" className={styles.evidenceLink}>Usage</a><span className={styles.badge}><span className={styles.dot} />{badge}</span></nav>
     </div></header>
     <main className={styles.main}>
       <div className={styles.intro}><span className={styles.eyebrow}>Virtual interview patient</span><h1>A little practice.<br />A better conversation.</h1><p>Meet your patient. Listen closely. Ask what matters.</p></div>
       {!cases.length ? <section className={styles.card}><h2>No patient cases available</h2><p className={styles.subtle}>Create a synthetic patient to begin.</p><button type="button" className={styles.secondary} onClick={() => setCreating(true)}>New patient</button></section> : <>
         <section className={styles.setup} aria-labelledby="setup-title">
           <div className={styles.sectionTitle}><h2 id="setup-title">Choose your patient</h2><span>{locked ? "Locked during the interview" : "Synthetic cases only"}</span></div>
-          <div className={styles.caseGrid}>{cases.map(c => <button type="button" key={c.id} disabled={locked} aria-pressed={caseId === c.id} className={`${styles.caseCard} ${caseId === c.id ? styles.selected : ""}`} onClick={() => { clearInterview(); setCaseId(c.id); setPersonalityId(c.personalities[0]?.id ?? ""); }}>
+          <div className={styles.caseGrid}>{cases.map(c => <button type="button" key={c.id} disabled={locked} aria-pressed={caseId === c.id} className={`${styles.caseCard} ${caseId === c.id ? styles.selected : ""}`} onClick={() => chooseCase(c)}>
             <span className={styles.avatar} aria-hidden="true">{initials(c.patient.name)}</span>
             <span className={styles.caseInfo}><strong>{c.patient.name}</strong><span>{c.patient.age} years · {c.patient.job}</span><span className={styles.caseTitle}>{c.title}</span><span className={styles.redFlagBadge}>{c.redFlagCount} red flag{c.redFlagCount === 1 ? "" : "s"}</span></span><span className={styles.selectionMark} aria-hidden="true">{caseId === c.id ? "✓" : ""}</span>
           </button>)}<button type="button" disabled={locked} className={`${styles.caseCard} ${styles.newPatient}`} onClick={() => setCreating(true)}><span className={styles.avatar} aria-hidden="true">+</span><span className={styles.caseInfo}><strong>New patient</strong><span>Create a synthetic teaching case</span></span></button></div>
@@ -349,7 +428,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
               <span className={`${styles.state} ${stateTone}`} role="status"><span className={styles.stateDot} aria-hidden="true" />{state}</span>
             </div>}
             <div className={styles.orbArea}>
-              <button ref={orb} type="button" className={orbClass} style={{ "--mic-level": 0, "--out-level": 0 } as CSSProperties} disabled={busy} aria-label={active ? "End interview" : "Start interview"} onClick={toggleInterview}>
+              <button ref={orb} type="button" className={orbClass} style={{ "--mic-level": 0, "--out-level": 0 } as CSSProperties} disabled={busy || awaitingFeedback} aria-label={active ? "End interview" : "Start interview"} onClick={toggleInterview}>
                 {active ? <span className={styles.stopIcon} /> : <svg width="34" height="42" viewBox="0 0 34 42" fill="none" aria-hidden="true"><rect x="10" y="2" width="14" height="25" rx="7" stroke="currentColor" strokeWidth="2.5" /><path d="M3 20v2a14 14 0 0 0 28 0v-2M17 36v5M11 41h12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /></svg>}
               </button>
               <strong className={styles.orbLabel}>{active ? "End interview" : ended ? "Start a new interview" : "Start interview"}</strong>
@@ -363,8 +442,8 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
               {busy && <p className={styles.thinking}>Patient is thinking…</p>}
             </div>
             <form className={styles.composer} onSubmit={event => void submit(event)}>
-              <label htmlFor="question" className="sr-only">Your question to the patient</label><input id="question" value={text} onChange={event => setText(event.target.value)} placeholder="Ask your patient a question…" maxLength={8000} autoComplete="off" disabled={busy} />
-              <button type="submit" aria-label="Send question" disabled={!text.trim() || busy || (active === "voice" && status !== "Listening")}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+              <label htmlFor="question" className="sr-only">Your question to the patient</label><input id="question" value={text} onChange={event => setText(event.target.value)} placeholder="Ask your patient a question…" maxLength={8000} autoComplete="off" disabled={busy || awaitingFeedback} />
+              <button type="submit" aria-label="Send question" disabled={!text.trim() || busy || awaitingFeedback || (active === "voice" && status !== "Listening")}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
             </form>
             <div className={styles.composerFoot}>
               <p className={styles.composerNote}>Text is always available. {active === "voice" ? "Typed questions use the same voice conversation." : "Press Enter to send."}</p>
@@ -372,21 +451,28 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
             </div>
           </section>
           <aside className={styles.sidebar}>
-            <section className={`${styles.card} ${styles.facts}`} aria-labelledby="facts-title"><div className={styles.sectionTitle}><h2 id="facts-title">Disclosed facts</h2><span className={styles.count}>{revealed.size}/{selected?.facts.length ?? 0}</span></div><p className={styles.subtle}>The patient reveals their story as you ask.</p><progress className={styles.progress} value={revealed.size} max={selected?.facts.length || 1} aria-label="Facts disclosed" />
+            <section className={styles.card} aria-labelledby="goals-title"><h2 id="goals-title">This session</h2><ul className={styles.goals}>{goals.map(goal => <li key={goal}>{goal}</li>)}</ul><p className={styles.subtle}>{difficultyFor(profile) === "supported" ? "Retrieve first; use feedback to choose one thing to improve next." : "Practise independently, then identify your own gaps."}</p>{!persistent && <p role="status">Browser storage is unavailable. Learning progress lasts while this page stays open. Export before leaving.</p>}<button type="button" className={styles.learningExport} onClick={() => downloadJson(profile, "medbot-learning.json")}>Export learning JSON</button></section>
+            <section className={styles.card}><label className={styles.toggle}><input type="checkbox" checked={instructor} disabled={awaitingFeedback} onChange={event => setInstructor(event.target.checked)} />Instructor view</label><p className={styles.subtle}>Show the teaching checklist and guard observations.</p></section>
+            {(instructor && (!ended || reflection)) && <><section className={`${styles.card} ${styles.facts}`} aria-labelledby="facts-title"><div className={styles.sectionTitle}><h2 id="facts-title">Disclosed facts</h2><span className={styles.count}>{revealed.size}/{selected?.facts.length ?? 0}</span></div><p className={styles.subtle}>The patient reveals their story as you ask.</p><progress className={styles.progress} value={revealed.size} max={selected?.facts.length || 1} aria-label="Facts disclosed" />
               {categories.map(category => <div className={styles.factGroup} key={category}><h3>{category}</h3><ul>{selected?.facts.filter(f => f.category === category).map(f => <li key={f.id} className={revealed.has(f.id) ? styles.disclosed : ""}><span className={styles.check} aria-hidden="true">{revealed.has(f.id) ? "✓" : ""}</span><span><span className="sr-only">{revealed.has(f.id) ? "Disclosed: " : "Not yet disclosed: "}</span>{f.lay}</span></li>)}</ul></div>)}
             </section>
-            <section className={`${styles.card} ${styles.guard}`} aria-labelledby="guard-title"><div className={styles.sectionTitle}><h2 id="guard-title">Consistency check</h2></div><p className={styles.subtle}>{guardPending ? "Checking the latest replies…" : warnings.length ? "Review these observations after your interview." : "Observations will appear here as you talk."}</p>{warnings.length > 0 && <ul className={styles.warningList}>{warnings.map((warning, index) => <li key={index}><strong>{warning.type.replaceAll("_", " ")}</strong><span>{warning.detail}</span></li>)}</ul>}</section>
+            <section className={`${styles.card} ${styles.guard}`} aria-labelledby="guard-title"><div className={styles.sectionTitle}><h2 id="guard-title">Consistency check</h2></div><p className={styles.subtle}>{guardPending ? "Checking the latest replies…" : warnings.length ? "Review these observations after your interview." : "Observations will appear here as you talk."}</p>{warnings.length > 0 && <ul className={styles.warningList}>{warnings.map((warning, index) => <li key={index}><strong>{warning.type.replaceAll("_", " ")}</strong><span>{warning.detail}</span></li>)}</ul>}</section></>}
           </aside>
         </div>
-        {ended && <section className={`${styles.card} ${styles.summary}`} aria-labelledby="summary-title">
+        {ended && !reflection && <section className={`${styles.card} ${styles.summary}`} aria-labelledby="reflection-title">
+          <h2 id="reflection-title">Pause before feedback</h2><p>What is your main clinical concern, and how confident are you that you explored what matters? Use synthetic case details only; do not enter names.</p>
+          <form className={styles.reflection} onSubmit={submitReflection}><label htmlFor="concern">Main clinical concern<input id="concern" required maxLength={240} value={concern} onChange={event => setConcern(event.target.value)} /></label><label htmlFor="confidence">Confidence (1–5)<select id="confidence" value={confidence} onChange={event => setConfidence(Number(event.target.value))}>{[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}{n === 1 ? " · Very unsure" : n === 5 ? " · Very sure" : ""}</option>)}</select></label><button className={styles.secondary} type="submit" disabled={!concern.trim()}>Save reflection and see feedback</button></form>
+        </section>}
+        {ended && reflection && <section className={`${styles.card} ${styles.summary}`} aria-labelledby="summary-title">
           <div className={styles.summaryHead}><div><span className={styles.eyebrow}>Interview complete</span><h2 id="summary-title">Every question builds the picture.</h2></div><button type="button" className={styles.secondary} disabled={!messages.length} onClick={downloadTranscript}>Download transcript</button></div>
+          <p>Your concern: {reflection.reflection.concern} · Confidence {reflection.reflection.confidence}/5. <a href="/learning">Review your learning and next patient</a></p>
           <div className={styles.summaryStats}><div><strong>{revealed.size}<small> / {selected?.facts.length}</small></strong><span>Facts covered</span></div><div><strong>{(selected?.facts.length ?? 0) - revealed.size}</strong><span>Still to explore</span></div><div><strong>{messages.filter(m => m.role === "patient").length}</strong><span>Patient turns</span></div>{(["voice", "text"] as const).map(kind => { const values = timings.filter(t => t.kind === kind).map(t => t.ms); return values.length ? <div key={kind}><strong>{duration(median(values))}</strong><span>Median {kind === "voice" ? "voice onset" : "text round trip"}</span></div> : null; })}</div>
           <div className={styles.summaryPanels}><div className={styles.coachWrap}><h3>Coach report</h3><CoachPanel state={coach} hasMessages={messages.some(m => m.text.trim())} onRetry={() => void loadCoach(generation.current)} /></div>
           <div className={styles.coachWrap}><h3>Anamnesis</h3><AnamnesisPanel state={anamnesis} onRetry={() => void loadAnamnesis(generation.current)} /></div></div>
         </section>}
       </>}
-      {creating && <CaseCreator onClose={() => setCreating(false)} onCreated={c => { clearInterview(); setCases(previous => [...previous.filter(item => item.id !== c.id), c]); setCaseId(c.id); setPersonalityId(c.personalities[0]?.id ?? ""); setCreating(false); setHint("AI-generated synthetic patient created. Your patient is ready."); }} />}
-      <footer className={styles.footer}><span>Built for better listening.</span><span>hackaTUM 2026 · Avelios VIP</span><p>Synthetic patients for education. Not clinical advice. Conversations are not saved by this app.</p></footer>
+      {creating && <CaseCreator onClose={() => setCreating(false)} onCreated={c => { setCases(previous => [...previous.filter(item => item.id !== c.id), c]); chooseCase(c); setCreating(false); setHint("AI-generated synthetic patient created. Your patient is ready."); }} />}
+      <footer className={styles.footer}><span>Built for better listening.</span><span>hackaTUM 2026 · Avelios VIP</span><p>Synthetic patients for education. Not clinical advice. Learning summaries and reflections stay in this browser.</p></footer>
     </main>
   </>;
 }

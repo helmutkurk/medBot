@@ -1,0 +1,25 @@
+.header { border-bottom: 1px solid var(--border); background: var(--surface); }
+.header nav { max-width: 1152px; margin: auto; padding: var(--s3) var(--s4); display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.header a { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent); text-decoration: none; }
+.wordmark { font-weight: 700; font-size: var(--t-lg); margin-right: auto; }
+.main { max-width: 1152px; padding: var(--s4); margin: auto; }
+.intro { margin: var(--s4) 0; }
+.intro h1 { font-size: var(--t-xl); letter-spacing: -.03em; }
+.intro p, .muted { color: var(--muted); }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); margin-top: var(--s4); }
+.card { padding: var(--s4); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); min-width: 0; overflow-wrap: anywhere; box-shadow: var(--shadow); }
+.card h2 { font-size: var(--t-lg); margin-bottom: var(--s3); }
+.card h3 { font-size: var(--t-md); margin: var(--s3) 0 var(--s2); }
+.card p + p { margin-top: var(--s2); }
+.card ul { padding-left: var(--s4); display: grid; gap: var(--s2); }
+.actions { display: flex; gap: var(--s2); flex-wrap: wrap; margin-top: var(--s3); }
+.actions button, .create, .primary { padding: 10px var(--s3); min-height: 44px; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; }
+.primary { display: inline-flex; align-items: center; background: var(--accent); color: var(--accent-ink); text-decoration: none; margin: var(--s2) 0; }
+.create { display: block; margin: var(--s3) 0; }
+.card .bars, .card .queue { list-style: none; padding: 0; gap: var(--s3); }
+.bars li div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s1) var(--s2); }
+.bars span { color: var(--muted); font-size: var(--t-sm); }
+.bars progress { width: 100%; height: 12px; accent-color: var(--accent); }
+.queue li { display: grid; gap: var(--s1); }
+.queue span { color: var(--muted); font-size: var(--t-sm); }
+@media (max-width: 700px) { .grid { grid-template-columns: minmax(0, 1fr); } .main, .header nav { padding: var(--s3); } .card { padding: var(--s3); } }

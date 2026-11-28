@@ -74,3 +74,9 @@ export interface EngineOptions {
   model?: string;        // text model, default from lib/engine
   signal?: AbortSignal;
 }
+
+// Calgary-Cambridge communication evidence is independent of fact coverage.
+export const communicationSkills = ["open_questions", "active_listening_summarising", "empathy", "ice_exploration", "signposting", "jargon_avoidance"] as const;
+export type CommunicationSkill = typeof communicationSkills[number];
+export interface CommunicationRating { score: 0 | 1 | 2; evidence: string; tip: string }
+export type CommunicationRatings = Record<CommunicationSkill, CommunicationRating>;

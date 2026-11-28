@@ -108,3 +108,9 @@ export async function interviewFrom(data: Record<string, unknown>) {
 export function requestSignal(request: Request): AbortSignal {
   return AbortSignal.any([request.signal, AbortSignal.timeout(45_000)]);
 }
+
+export function focusFrom(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > 6) throw new HttpError(400, "invalid_request", "focus must contain at most 6 learning goals.");
+  return value.map(item => string(item, "focus item", 160));
+}

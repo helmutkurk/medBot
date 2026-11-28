@@ -6,6 +6,6 @@ export function interviewCase(c: PatientCase) {
     personalities: c.personalities.map(({ id, label, voice }) => ({ id, label, voice })),
     factCount: c.facts.length,
     redFlagCount: c.facts.filter(f => f.red_flag).length,
-    facts: c.facts.map(({ id, category, lay }) => ({ id, category, lay })),
+    facts: c.facts.map(({ id, category, lay, red_flag }) => ({ id, category, lay, redFlag: red_flag === true })),
   };
 }

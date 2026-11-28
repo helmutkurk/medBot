@@ -1,3 +1,4 @@
+import { communicationSkills } from "../lib/case/types.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ChatMessage } from "../lib/case/types.ts";
@@ -5,7 +6,7 @@ import { buildConsistencyMemo, buildPatientInstructions, coachReport, getPersona
 
 const chest = await loadCase("chest-tightness-01");
 const opts = { apiKey: "placeholder" };
-const feedback = { strengths: ["You asked about smoking."], improvements: ["Explore past history."], quotes: [], suggestions: [] };
+const feedback = { strengths: ["You asked about smoking."], improvements: ["Explore past history."], quotes: [], suggestions: [], communication: Object.fromEntries(communicationSkills.map(skill => [skill, { score: 0, evidence: "", tip: "Practise this skill explicitly." }])) };
 function envelope(value: unknown): Response {
   return Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(value) }] }] });
 }
@@ -63,4 +64,24 @@ test("prompt has voice delivery per personality and memo lists only disclosed fa
   assert.ok(memo.includes(chest.facts.find(f => f.id === "smoking")!.lay));
   assert.ok(!memo.includes(chest.facts.find(f => f.id === "alcohol")!.lay));
   assert.ok(buildConsistencyMemo(chest, []).includes("Nothing medical"));
+});
+
+test("coach requests strict Calgary-Cambridge ratings and validates exact student evidence", async t => {
+  const question = "What worries you most?";
+  const communication = { ...feedback.communication, ice_exploration: { score: 1, evidence: "worries you most", tip: "Also ask about ideas and expectations." } };
+  t.mock.method(globalThis, "fetch", async (_url: unknown, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    assert.equal(body.text.format.strict, true);
+    assert.equal(body.store, false);
+    assert.deepEqual(body.text.format.schema.properties.communication.required, [...communicationSkills]);
+    assert.deepEqual(JSON.parse(body.input[0].content).focus, ["Explore ICE"]);
+    return envelope({ ...feedback, communication });
+  });
+  const report = await coachReport(chest, [{ role: "student", text: question }], [], opts, ["Explore ICE"]);
+  assert.deepEqual(report.communication.ice_exploration, communication.ice_exploration);
+  assert.equal(report.score, 0);
+  for (const invalid of [undefined, {}, { ...communication, empathy: { score: 3, evidence: "", tip: "Try" } }, { ...communication, empathy: { score: 1, evidence: "", tip: "Try" } }, { ...communication, empathy: { score: 1, evidence: "Invented", tip: "Try" } }, { ...communication, empathy: { score: 1, evidence: "Patient-only wording", tip: "Try" } }, { ...communication, empathy: { score: 0, evidence: "", tip: "" } }]) {
+    t.mock.method(globalThis, "fetch", async () => envelope({ ...feedback, communication: invalid }));
+    await assert.rejects(coachReport(chest, [{ role: "student", text: question }, { role: "patient", text: "Patient-only wording" }], [], opts), error => error instanceof OpenAIError && error.kind === "invalid_response");
+  }
 });

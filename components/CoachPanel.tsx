@@ -1,4 +1,6 @@
 import type { CoachReport } from "../lib/engine/index.ts";
+import { communicationSkills } from "../lib/case/types.ts";
+import { domainLabels } from "../lib/engine/learner.ts";
 import styles from "./CoachPanel.module.css";
 
 export type CoachState =
@@ -41,6 +43,10 @@ export function CoachPanel({ state, onRetry, hasMessages }: { state: CoachState;
       {report.strengths.length > 0 && <div><h3>Strengths</h3><ul className={styles.plain}>{report.strengths.map((item, i) => <li key={i}>{item}</li>)}</ul></div>}
       {report.improvements.length > 0 && <div><h3>To improve</h3><ul className={styles.plain}>{report.improvements.map((item, i) => <li key={i}>{item}</li>)}</ul></div>}
     </div>}
+    <section><h3>Calgary-Cambridge communication</h3><ul className={styles.facts}>{communicationSkills.map(skill => {
+      const rating = report.communication[skill];
+      return <li key={skill}><strong>{domainLabels[skill]} · {rating.score}/2</strong>{rating.evidence ? <q>{rating.evidence}</q> : <span>Not demonstrated in the transcript.</span>}<span>Next time: {rating.tip}</span></li>;
+    })}</ul></section>
     <div className={styles.columns}>
       <div><h3>Covered ({report.covered.length})</h3>{report.covered.length ? <ul className={styles.facts}>{report.covered.map(f => <li key={f.factId}><strong>{f.label}</strong>{f.quote && <q>{f.quote}</q>}</li>)}</ul> : <p className={styles.note}>Nothing covered yet.</p>}</div>
       <div><h3>Missed ({report.missed.length})</h3>{report.missed.length ? <ul className={styles.facts}>{report.missed.map(f => <li key={f.factId}><strong>{f.label}</strong><span>Try: “{f.suggestedQuestion}”</span></li>)}</ul> : <p className={styles.note}>You covered every fact.</p>}</div>

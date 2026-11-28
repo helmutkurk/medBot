@@ -164,3 +164,14 @@
 .setupCard ol { margin: var(--s4) 0 0; padding-left: var(--s4); }
 .setupCard li + li { margin-top: var(--s3); }
 .setupCard pre { overflow-x: auto; background: var(--surface-2); padding: var(--s3); border-radius: var(--r-sm); }
+
+.goals { padding-left: var(--s4); margin: var(--s3) 0; display: grid; gap: var(--s2); }
+.toggle { display: flex; align-items: center; gap: var(--s2); min-height: 44px; font-weight: 600; }
+.toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
+.reflection { display: grid; gap: var(--s3); max-width: 640px; }
+.reflection label { display: grid; gap: var(--s2); }
+.reflection input, .reflection select { width: 100%; min-height: 44px; padding: var(--s2); font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); }
+@media (max-width: 460px) { .headerInner { flex-wrap: wrap; } .headerNav { justify-content: flex-start; } }
+.learningExport { min-height: 44px; padding: var(--s2); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--accent); font-weight: 600; }
+.reflection button { min-height: 44px; }
+.evidenceLink { min-height: 44px; display: inline-flex; align-items: center; }

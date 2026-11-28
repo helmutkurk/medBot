@@ -117,3 +117,26 @@ test("route maps actual deadline errors, cancellation and missing credentials", 
   const cancelled = await route(async () => { throw new OpenAIError("aborted", "Cancelled"); });
   assert.equal(cancelled.status, 499);
 });
+
+test("case generation validates optional learning focus and forwards it only as draft data", async t => {
+  process.env.OPENAI_API_KEY = "placeholder";
+  t.after(() => { process.env.OPENAI_API_KEY = ""; });
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async (_url: unknown, init: RequestInit) => {
+    calls++;
+    const body = JSON.parse(String(init.body));
+    assert.deepEqual(JSON.parse(body.input[0].content).draft.focus, ["Red flags", "Empathy"]);
+    assert.match(body.instructions, /focus as learning-domain data/);
+    assert.equal(body.text.format.schema.properties.facts.minItems, 10);
+    assert.equal(body.text.format.schema.properties.facts.maxItems, 15);
+    // Exercise forwarding without writing a generated file into cases/.
+    return Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "refusal", refusal: "Offline test refusal" }] }] });
+  });
+  const postFocus = (focus: unknown) => generate(new Request("http://localhost/api/cases/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ diagnosis: "Synthetic example", focus }) }));
+  for (const invalid of ["history", [""], ["x".repeat(161)], Array(7).fill("history"), [42], null]) {
+    assert.equal((await postFocus(invalid)).status, 400);
+  }
+  assert.equal(calls, 0);
+  assert.equal((await postFocus(["Red flags", "Empathy"])).status, 502);
+  assert.equal(calls, 1);
+});

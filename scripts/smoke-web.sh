@@ -46,6 +46,9 @@ assert.equal(casesResponse.status, 200);
 const cases = await casesResponse.json();
 assert.ok(cases.length > 0);
 assert.equal((await fetch(`${base}/eval`)).status, 200);
+const learning = await fetch(`${base}/learning`);
+assert.equal(learning.status, 200);
+assert.ok((await learning.text()).includes("Your learning"));
 const home = await fetch(base);
 assert.equal(home.status, 200);
 const html = await home.text();
@@ -57,5 +60,5 @@ const chat = await fetch(`${base}/api/chat`, {
 });
 assert.equal(chat.status, 503);
 assert.deepEqual(await chat.json(), { error: { code: "no_api_key", message: "Set OPENAI_API_KEY in .env.local and restart the server." } });
-console.log("HTTP smoke passed: setup screen, health ready:false, cases, /eval 200, chat no_api_key 503.");
+console.log("HTTP smoke passed: setup screen, health ready:false, cases, /eval and /learning 200, chat no_api_key 503.");
 JS

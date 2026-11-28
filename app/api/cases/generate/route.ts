@@ -1,7 +1,7 @@
 import { generateCase, saveGeneratedCase } from "../../../../lib/engine/index.ts";
 import { interviewCase } from "../../../../lib/server/cases.ts";
 import { engineOptions } from "../../../../lib/server/env.ts";
-import { body, HttpError, json, requestSignal, route, string } from "../../../../lib/server/http.ts";
+import { body, focusFrom, HttpError, json, requestSignal, route, string } from "../../../../lib/server/http.ts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +20,8 @@ export function POST(request: Request) {
     }
     const setting = data.setting === undefined ? undefined : string(data.setting, "setting", 200);
     const personalityHints = data.personalityHints === undefined ? undefined : string(data.personalityHints, "personalityHints", 500);
-    const result = await generateCase({ diagnosis, age, sex, setting, personalityHints }, engineOptions(requestSignal(request), "/api/cases/generate"));
+    const focus = focusFrom(data.focus);
+    const result = await generateCase({ diagnosis, age, sex, setting, personalityHints, focus }, engineOptions(requestSignal(request), "/api/cases/generate"));
     await saveGeneratedCase(result.case);
     return json({ case: interviewCase(result.case), mode: result.mode }, 201);
   });
