@@ -1,11 +1,26 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { MobileNav } from "../components/MobileNav.tsx";
+import { PwaClient } from "../components/PwaClient.tsx";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "medBot · Virtual interview patient",
   description: "Practice patient interviews with a synthetic patient. Built for hackaTUM 2026.",
+  applicationName: "medBot",
+  appleWebApp: { capable: true, title: "medBot", statusBarStyle: "default" },
+  icons: { apple: "/icons/apple-touch-icon.png" },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f5f5f7" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f1112" },
+  ],
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><body>{children}<PwaClient /><MobileNav /></body></html>;
 }

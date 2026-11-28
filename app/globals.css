@@ -52,3 +52,12 @@ h1, h2, h3, p { margin: 0; }
 .error-page p { margin: var(--s3) 0; color: var(--muted); }
 .error-page button { padding: 12px var(--s4); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+@media (width < 640px) {
+  /* Reserve the fixed navigation plus the home indicator, including on short screens. */
+  body { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+  html { scroll-padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+  body button, body input:not([type="checkbox"]):not([type="radio"]), body select, body textarea, body a { min-height: 44px !important; }
+  body button, body a { min-width: 44px !important; }
+  body main a { display: inline-flex; align-items: center; }
+  body input, body select, body textarea { font-size: 16px !important; }
+}

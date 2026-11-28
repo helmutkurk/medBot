@@ -1,0 +1,11 @@
+.panel { width: calc(100% - 48px); max-width: 1104px; margin: 0 auto var(--s5); padding: var(--s4); border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); overflow-wrap: anywhere; }
+.panel h2 { font-size: var(--t-lg); margin-bottom: var(--s2); }
+.panel h3 { font-size: var(--t-md); }
+.panel p { color: var(--muted); margin: var(--s2) 0; }
+.panel button { min-height: 44px; padding: var(--s2) var(--s3); border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-2); font-weight: 600; }
+.panel .install { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.reminder { margin-top: var(--s3); padding-top: var(--s3); border-top: 1px solid var(--border); }
+.actions { display: flex; align-items: flex-end; gap: var(--s3); flex-wrap: wrap; margin: var(--s3) 0; }
+.actions label { display: grid; gap: var(--s1); font-weight: 600; }
+.actions input { min-width: 132px; min-height: 44px; padding: var(--s2); font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); }
+@media (width < 640px) { .panel { width: calc(100% - 32px); padding: var(--s3); } }

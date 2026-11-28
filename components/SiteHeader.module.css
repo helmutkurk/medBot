@@ -11,3 +11,8 @@
   .wordmark { margin-right: 0; flex: 1 0 100%; }
   .nav { margin-left: -12px; }
 }
+@media (width < 640px) {
+  .inner { padding-top: max(8px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .wordmark { margin-right: auto; flex: 0 1 auto; }
+  .nav { display: none; }
+}
