@@ -1,0 +1,11 @@
+.steps { list-style: none; margin: 0; padding: var(--s3) 0 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s2); counter-reset: none; }
+.steps li { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--s1); text-align: center; color: var(--muted); font-size: var(--t-xs); font-weight: 550; }
+.steps li::before { content: ""; position: absolute; top: 15px; right: calc(50% + 20px); left: calc(-50% + 20px); height: 2px; background: var(--border); }
+.steps li:first-child::before { display: none; }
+.steps li.done::before, .steps li.current::before { background: var(--accent); }
+.mark { position: relative; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--border); background: var(--surface); font-size: var(--t-sm); font-variant-numeric: tabular-nums; }
+.done { color: var(--text); }
+.done .mark { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.current { color: var(--accent); font-weight: 650; }
+.current .mark { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.label { line-height: 1.3; }

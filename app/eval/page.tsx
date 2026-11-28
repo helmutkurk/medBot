@@ -1,5 +1,6 @@
 import { loadLatestEval } from "../../lib/server/eval.ts";
 import type { EvalMetrics } from "../../lib/server/eval.ts";
+import { SiteHeader } from "../../components/SiteHeader.tsx";
 import styles from "./page.module.css";
 
 export const runtime = "nodejs";
@@ -24,7 +25,7 @@ const tiles: { key: keyof EvalMetrics; label: string; format: (value: number | u
 export default async function EvalPage() {
   const evidence = await loadLatestEval();
   return <>
-    <header className={styles.header}><nav aria-label="Main"><a className={styles.wordmark} href="/">medBot</a><a href="/usage">Usage</a><a href="/">Back to patients</a></nav></header>
+    <SiteHeader current="evidence" />
     <main className={styles.main}>
       <div className={styles.intro}><span className={styles.eyebrow}>Beyond one lucky demo</span><h1>Interview evidence.</h1><p>The latest evaluation, across cases and personalities.</p></div>
       {!evidence ? <section className={styles.card}><h2>No evaluation available yet</h2><p>Run the evaluation harness to create a report in <code>eval/results/</code>, then reload this page.</p><pre>npm run eval -- --n 3</pre><p>Set OPENAI_API_KEY before running the evaluation.</p></section> : <>

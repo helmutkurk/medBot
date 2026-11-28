@@ -8,6 +8,7 @@ import { loadProfile, resetProfile } from "./learner-storage.ts";
 import { CaseCreator } from "./CaseCreator.tsx";
 import { downloadJson } from "./download.ts";
 import type { InterviewCase } from "./types.ts";
+import { SiteHeader } from "./SiteHeader.tsx";
 import styles from "./Learning.module.css";
 
 export function Learning({ cases: initialCases, ready }: { cases: InterviewCase[]; ready: boolean }) {
@@ -33,11 +34,11 @@ export function Learning({ cases: initialCases, ready }: { cases: InterviewCase[
     return <li key={domain}><div><label htmlFor={`mastery-${domain}`}>{domainLabels[domain]}</label><span>{mastery.count ? `${Math.round(mastery.value * 100)}% · ${mastery.count} interviews` : "Not measured yet"}</span></div><progress id={`mastery-${domain}`} max={1} value={mastery.value} /></li>;
   }
   return <>
-    <header className={styles.header}><nav aria-label="Main"><a href="/" className={styles.wordmark}>medBot</a><a href="/">Interview</a><a href="/eval">Eval</a><a href="/usage">Usage</a></nav></header>
+    <SiteHeader current="learning" />
     <main className={styles.main}>
       <div className={styles.intro}><h1>Your learning</h1><p>Retrieve, reflect, practise one improvement, then return to it.</p></div>
       {!loaded ? <p role="status">Loading learning progress from this browser…</p> : <>
-        <section className={styles.card}><h2>Practice that builds on your last interview</h2><p>{profile.sessions.length} reflected interviews · {calibration.count} with feedback</p><p>Progress and reflections are stored only in this browser. No learner name is collected. Export downloads a local JSON file.</p>{!persistent && <p role="status">Browser storage is unavailable or contains unsupported data. Progress is held in memory while this page is open. Export before leaving.</p>}<div className={styles.actions}><button type="button" onClick={() => downloadJson(profile, "medbot-learning.json")}>Export learning JSON</button><button type="button" onClick={() => { setPersistent(resetProfile()); setProfile(emptyProfile()); }}>Reset learning progress</button></div></section>
+        <section className={styles.card}><h2>Practice that builds on your last interview</h2><p>{profile.sessions.length} reflected interviews · {calibration.count} with feedback</p>{!profile.sessions.length && <p><strong>No interviews yet.</strong> Complete one interview with a reflection and this page starts adapting to you. <a href="/">Start your first interview</a></p>}<p>Progress and reflections are stored only in this browser. No learner name is collected. Export downloads a local JSON file.</p>{!persistent && <p role="status">Browser storage is unavailable or contains unsupported data. Progress is held in memory while this page is open. Export before leaving.</p>}<div className={styles.actions}><button type="button" onClick={() => downloadJson(profile, "medbot-learning.json")}>Export learning JSON</button><button type="button" onClick={() => { setPersistent(resetProfile()); setProfile(emptyProfile()); }}>Reset learning progress</button></div></section>
         <div className={styles.grid}>
           <section className={styles.card}><h2>Next patient</h2>{recommendation && next ? <><h3>{next.title}</h3><p>{next.personalities.find(p => p.id === recommendation.personalityId)?.label} · {recommendation.difficulty} practice</p><ul>{recommendation.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul><h3>Session goals</h3><ul>{recommendation.goals.map(goal => <li key={goal}>{goal}</li>)}</ul><a className={styles.primary} href={`/?case=${encodeURIComponent(next.id)}&personality=${encodeURIComponent(recommendation.personalityId)}`}>Start recommended patient</a></> : <p>No cases available. Create a synthetic patient to start.</p>}
             <button className={styles.create} type="button" disabled={!ready} onClick={() => setCreating(true)}>Create a patient for my weak spots</button><p>Focus: {focus.join(", ")}. {ready ? "Choose a diagnosis; only these domain labels are sent as learning focus." : "Connect OpenAI on the interview page to create a patient."}</p>

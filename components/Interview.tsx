@@ -12,6 +12,8 @@ import { AnamnesisPanel } from "./AnamnesisPanel.tsx";
 import type { AnamnesisState } from "./AnamnesisPanel.tsx";
 import { CaseCreator } from "./CaseCreator.tsx";
 import { downloadJson } from "./download.ts";
+import { SiteHeader } from "./SiteHeader.tsx";
+import { Steps } from "./Steps.tsx";
 import { CoachPanel } from "./CoachPanel.tsx";
 import type { CoachState } from "./CoachPanel.tsx";
 import { RealtimeInterview } from "./realtime/client.ts";
@@ -43,12 +45,12 @@ async function post<T>(path: string, data: unknown, signal: AbortSignal): Promis
 
 export function Interview({ cases, health }: { cases: InterviewCase[]; health: Health }) {
   if (!health.ready) return <>
-    <header className={styles.header}><div className={styles.headerInner}><a className={styles.wordmark} href="/">medBot</a><nav aria-label="Main"><a href="/learning" className={styles.evidenceLink}>Your learning</a><a href="/eval" className={styles.evidenceLink}>Eval</a><a href="/usage" className={styles.evidenceLink}>Usage</a></nav></div></header>
+    <SiteHeader current="interview" />
     <main className={styles.main}>
       <section className={`${styles.card} ${styles.setupCard}`} aria-labelledby="setup-title">
-        <span className={styles.eyebrow}>Get started</span>
+        <span className={styles.eyebrow}>medBot setup</span>
         <h1 id="setup-title">Connect to OpenAI</h1>
-        <p>Add your API key to start interviewing patients.</p>
+        <p>medBot is a virtual patient you interview by voice or text. It needs an OpenAI API key before the first patient can talk.</p>
         <ol>
           <li>Copy <code>.env.example</code> to <code>.env.local</code>:<pre>cp .env.example .env.local</pre></li>
           <li>Add <code>OPENAI_API_KEY</code> to <code>.env.local</code>.</li>
@@ -73,6 +75,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
   const [confidence, setConfidence] = useState(3);
   const [goals, setGoals] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
+  const [slowConnect, setSlowConnect] = useState(false);
   const [caseId, setCaseId] = useState(cases[0]?.id ?? "");
   const selected = cases.find(c => c.id === caseId);
   const [personalityId, setPersonalityId] = useState(selected?.personalities[0]?.id ?? "");
@@ -99,6 +102,8 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
   const requests = useRef<AbortController | null>(null);
   const generation = useRef(0);
   const sending = useRef(false);
+  const workspace = useRef<HTMLDivElement>(null);
+  const feedback = useRef<HTMLElement>(null);
   const guardTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   function controller(): AbortController {
@@ -197,6 +202,30 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     setStatus("Listening");
   }
 
+  function scrollTo(target: HTMLElement | null): void {
+    target?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  }
+
+  // Back to step 1 with the picker open. Used by "Change patient" and the end-of-flow buttons.
+  function openPicker(): void {
+    clearInterview();
+    window.scrollTo({ top: 0 });
+  }
+
+  function practise(nextCase: InterviewCase, nextPersonalityId: string): void {
+    clearInterview();
+    setCaseId(nextCase.id);
+    setPersonalityId(nextPersonalityId);
+    setGoals(recommendNext(profileRef.current, [nextCase], new Date().toISOString())?.goals ?? []);
+    window.scrollTo({ top: 0 });
+  }
+
+  useEffect(() => {
+    if (active !== "voice" || status !== "Connecting") { setSlowConnect(false); return; }
+    const timer = setTimeout(() => setSlowConnect(true), 8000);
+    return () => clearTimeout(timer);
+  }, [active, status]);
+
   useEffect(() => {
     const loaded = loadProfile();
     profileRef.current = loaded.profile;
@@ -237,8 +266,15 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
   }, [messages, busy]);
 
   useEffect(() => {
-    if (ended) document.getElementById("concern")?.focus();
+    if (!ended) return;
+    const field = document.getElementById("concern");
+    field?.focus({ preventScroll: true });
+    scrollTo(field?.closest("section") ?? null);
   }, [ended]);
+
+  useEffect(() => {
+    if (reflection) scrollTo(feedback.current);
+  }, [reflection]);
 
   function chooseCase(c: InterviewCase): void {
     clearInterview();
@@ -269,6 +305,23 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     profileRef.current = next;
     setProfile(next);
     setPersistent(persistProfile(next));
+  }
+
+  function startText(): void {
+    if (!selected || active || busy) return;
+    clearInterview();
+    startedAt.current = performance.now();
+    setActive("text");
+    scrollTo(workspace.current);
+    setTimeout(() => document.getElementById("question")?.focus({ preventScroll: true }), 0);
+  }
+
+  function leaveVoice(): void {
+    voice.current?.close();
+    voice.current = null;
+    setActive("text");
+    setStatus("Listening");
+    setHint("");
   }
 
   function submitReflection(event: FormEvent<HTMLFormElement>): void {
@@ -309,6 +362,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     startedAt.current = performance.now();
     setActive("voice");
     setStatus("Connecting");
+    scrollTo(workspace.current);
     const token = generation.current;
     const client = new RealtimeInterview({
       onStatus: next => { if (token === generation.current) setStatus(next); },
@@ -401,27 +455,45 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     ? ({ Connecting: "Connecting", Listening: "Listening", "Patient speaking": "Speaking", Thinking: "Thinking" } as const)[status]
     : busy ? "Thinking" : active === "text" ? "Ready" : ended ? "Finished" : "Not started";
   const stateTone = state === "Speaking" ? styles.toneSpeaking : state === "Thinking" || state === "Connecting" ? styles.toneBusy : state === "Listening" || state === "Ready" ? styles.toneLive : "";
+  const step = ended ? (reflection ? 3 : 2) : active || messages.length ? 1 : 0;
+  const otherPersonalities = selected?.personalities.filter(p => p.id !== personalityId) ?? [];
+  const recommendation = ended && reflection ? recommendNext(profile, cases, new Date().toISOString()) : null;
+  const nextCase = cases.find(c => c.id === recommendation?.caseId);
+  const nextPersonality = nextCase?.personalities.find(p => p.id === recommendation?.personalityId);
   const orbClass = [styles.orb, active ? styles.orbActive : "", active === "voice" && status === "Patient speaking" ? styles.speaking : ""].join(" ");
 
   return <>
-    <header className={styles.header}><div className={styles.headerInner}>
-      <a className={styles.wordmark} href="/" aria-label="medBot home"><span className={styles.logo} aria-hidden="true">m</span>medBot</a>
-      <nav className={styles.headerNav} aria-label="Main"><a href="/learning" className={styles.evidenceLink}>Your learning</a><a href="/eval" className={styles.evidenceLink}>Eval</a><a href="/usage" className={styles.evidenceLink}>Usage</a><span className={styles.badge}><span className={styles.dot} />{badge}</span></nav>
-    </div></header>
+    <SiteHeader current="interview"><span className={styles.badge}><span className={styles.dot} />{badge}</span></SiteHeader>
     <main className={styles.main}>
-      <div className={styles.intro}><span className={styles.eyebrow}>Virtual interview patient</span><h1>A little practice.<br />A better conversation.</h1><p>Meet your patient. Listen closely. Ask what matters.</p></div>
+      <Steps current={step} />
+      {step === 0 && <section className={styles.hero} aria-labelledby="hero-title">
+        <span className={styles.eyebrow}>Virtual interview patient</span>
+        <h1 id="hero-title">Practise patient interviews out loud.</h1>
+        <p>medBot plays a synthetic patient you question by voice or text. Afterwards a coach shows what you missed and picks your next patient.</p>
+        {selected && <>
+          <div className={styles.heroActions}>
+            <button type="button" className={styles.primary} disabled={locked} onClick={startInterview}>Start voice interview with {patientFirst}</button>
+            <button type="button" className={styles.secondary} disabled={locked} onClick={startText}>Interview by text</button>
+          </div>
+          <p className={styles.heroNote}>Voice needs a microphone and a modern browser. Text works everywhere. Selected: {selected.patient.name}, {selected.title}{personality ? ` · ${personality.label}` : ""}. <a href="#setup">Choose another patient</a></p>
+        </>}
+      </section>}
       {!cases.length ? <section className={styles.card}><h2>No patient cases available</h2><p className={styles.subtle}>Create a synthetic patient to begin.</p><button type="button" className={styles.secondary} onClick={() => setCreating(true)}>New patient</button></section> : <>
-        <section className={styles.setup} aria-labelledby="setup-title">
-          <div className={styles.sectionTitle}><h2 id="setup-title">Choose your patient</h2><span>{locked ? "Locked during the interview" : "Synthetic cases only"}</span></div>
+        {step > 0 && selected ? <section className={styles.compact} aria-label="Selected patient">
+          <span className={styles.avatar} aria-hidden="true">{initials(selected.patient.name)}</span>
+          <div className={styles.patientInfo}><strong>{selected.patient.name}</strong><span>{selected.title}{personality ? ` · ${personality.label}` : ""}</span></div>
+          <button type="button" className={styles.ghost} disabled={locked} onClick={openPicker}>Change patient</button>
+        </section> : <section id="setup" className={styles.setup} aria-labelledby="setup-title">
+          <div className={styles.sectionTitle}><h2 id="setup-title">1. Choose your patient</h2><span>Synthetic cases only</span></div>
           <div className={styles.caseGrid}>{cases.map(c => <button type="button" key={c.id} disabled={locked} aria-pressed={caseId === c.id} className={`${styles.caseCard} ${caseId === c.id ? styles.selected : ""}`} onClick={() => chooseCase(c)}>
             <span className={styles.avatar} aria-hidden="true">{initials(c.patient.name)}</span>
-            <span className={styles.caseInfo}><strong>{c.patient.name}</strong><span>{c.patient.age} years · {c.patient.job}</span><span className={styles.caseTitle}>{c.title}</span><span className={styles.redFlagBadge}>{c.redFlagCount} red flag{c.redFlagCount === 1 ? "" : "s"}</span></span><span className={styles.selectionMark} aria-hidden="true">{caseId === c.id ? "✓" : ""}</span>
+            <span className={styles.caseInfo}><strong>{c.patient.name}</strong><span>{c.patient.age} years · {c.patient.job}</span><span className={styles.caseTitle}><span className={styles.caseLabel}>Comes in with</span>{c.title}</span><span className={styles.chips}>{c.personalities.slice(0, 2).map(p => <span key={p.id} className={styles.chip}>{p.label}</span>)}</span></span><span className={styles.selectionMark} aria-hidden="true">{caseId === c.id ? "✓" : ""}</span>
           </button>)}<button type="button" disabled={locked} className={`${styles.caseCard} ${styles.newPatient}`} onClick={() => setCreating(true)}><span className={styles.avatar} aria-hidden="true">+</span><span className={styles.caseInfo}><strong>New patient</strong><span>Create a synthetic teaching case</span></span></button></div>
-          <div className={styles.personalityRow}><span className={styles.label}>Personality</span><div className={styles.segmented} role="group" aria-label="Patient personality">{selected?.personalities.map(p => <button type="button" key={p.id} disabled={locked} aria-pressed={p.id === personalityId} onClick={() => { clearInterview(); setPersonalityId(p.id); }}>{p.label}</button>)}</div></div>
-        </section>
-        <div className={styles.workspace}>
+          <div className={styles.personalityRow}><span className={styles.label}>Same facts, different person. Personality:</span><div className={styles.segmented} role="group" aria-label="Patient personality">{selected?.personalities.map(p => <button type="button" key={p.id} disabled={locked} aria-pressed={p.id === personalityId} onClick={() => { clearInterview(); setPersonalityId(p.id); }}>{p.label}</button>)}</div></div>
+        </section>}
+        <div className={styles.workspace} ref={workspace}>
           <section className={`${styles.card} ${styles.interview}`} aria-labelledby="interview-title">
-            <h2 id="interview-title" className="sr-only">Your interview</h2>
+            <h2 id="interview-title" className="sr-only">2. Your interview</h2>
             {selected && <div className={styles.patientCard}>
               <span className={`${styles.avatar} ${styles.avatarLg}`} aria-hidden="true">{initials(selected.patient.name)}</span>
               <div className={styles.patientInfo}><strong>{selected.patient.name}</strong><span>{selected.patient.age} years · {selected.patient.job}{personality ? ` · ${personality.label}` : ""}</span></div>
@@ -431,13 +503,16 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
               <button ref={orb} type="button" className={orbClass} style={{ "--mic-level": 0, "--out-level": 0 } as CSSProperties} disabled={busy || awaitingFeedback} aria-label={active ? "End interview" : "Start interview"} onClick={toggleInterview}>
                 {active ? <span className={styles.stopIcon} /> : <svg width="34" height="42" viewBox="0 0 34 42" fill="none" aria-hidden="true"><rect x="10" y="2" width="14" height="25" rx="7" stroke="currentColor" strokeWidth="2.5" /><path d="M3 20v2a14 14 0 0 0 28 0v-2M17 36v5M11 41h12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /></svg>}
               </button>
-              <strong className={styles.orbLabel}>{active ? "End interview" : ended ? "Start a new interview" : "Start interview"}</strong>
-              <span className={styles.status}>{active === "voice" ? (status === "Connecting" ? "Connecting to your patient…" : "Speak naturally, or type below.") : busy ? "Patient is thinking…" : active === "text" ? "Text interview · ready" : ended ? "Interview complete" : "A conversation starts with a question"}</span>
-              <span className={styles.latency} title={timingKind === "voice" ? "From speech stopped to first patient audio event" : "From submitting text to receiving the complete reply"}>{timingKind === "voice" ? "Voice onset" : "Text round trip"} · Last {duration(last)} · Median {duration(typical)}</span>
+              <strong className={styles.orbLabel}>{active ? "End interview" : ended ? "Start a new interview" : "Start voice interview"}</strong>
+              <span className={styles.status}>{active === "voice" ? (status === "Connecting" ? `Connecting to ${patientFirst}… allow the microphone if your browser asks.` : "Speak naturally, or type below.") : busy ? "Patient is thinking…" : active === "text" ? "Text interview · type your first question" : ended ? "Interview complete" : "Tap the microphone and ask your first question"}</span>
+              {active === "voice" && status === "Connecting" && <span className={styles.connecting} aria-hidden="true" />}
+              {slowConnect && active === "voice" && status === "Connecting" && <span className={styles.recover} role="alert">Taking longer than expected. <button type="button" className={styles.ghost} onClick={leaveVoice}>Continue in text</button></span>}
+              {!active && <button type="button" className={styles.ghost} disabled={locked || !selected} onClick={startText}>or interview by text, no microphone</button>}
+              {last != null && <span className={styles.latency} title={timingKind === "voice" ? "From speech stopped to first patient audio event" : "From submitting text to receiving the complete reply"}>{timingKind === "voice" ? "Voice onset" : "Text round trip"} · Last {duration(last)} · Median {duration(typical)}</span>}
             </div>
-            {hint && <p className={`${styles.notice} ${styles.noticeWarn}`} role="status">{hint}</p>}
+            {hint && <div className={`${styles.notice} ${styles.noticeWarn}`} role="status"><span>{hint}</span>{active === "text" && !messages.length && <button type="button" className={styles.ghost} onClick={startInterview}>Try voice again</button>}<button type="button" className={styles.ghost} onClick={() => setHint("")}>Dismiss</button></div>}
             <div ref={transcript} className={styles.transcript} role="log" aria-label="Interview transcript" aria-live="polite" aria-relevant="additions">
-              {!messages.length && <div className={styles.emptyTranscript}><p>“What brings you in today?”</p><small>A good place to begin. Start the interview and speak, or just type below.</small></div>}
+              {!messages.length && <div className={styles.emptyTranscript}><p>“What brings you in today?”</p><small>A good place to begin. Start the voice interview and speak, or type below.</small></div>}
               {messages.map(message => <div key={message.id} className={`${styles.message} ${message.role === "student" ? styles.student : styles.patient}`}><span className={styles.speaker}>{message.role === "student" ? "You" : patientFirst}</span><p>{message.text || "Transcribing…"}</p></div>)}
               {busy && <p className={styles.thinking}>Patient is thinking…</p>}
             </div>
@@ -452,7 +527,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
           </section>
           <aside className={styles.sidebar}>
             <section className={styles.card} aria-labelledby="goals-title"><h2 id="goals-title">This session</h2><ul className={styles.goals}>{goals.map(goal => <li key={goal}>{goal}</li>)}</ul><p className={styles.subtle}>{difficultyFor(profile) === "supported" ? "Retrieve first; use feedback to choose one thing to improve next." : "Practise independently, then identify your own gaps."}</p>{!persistent && <p role="status">Browser storage is unavailable. Learning progress lasts while this page stays open. Export before leaving.</p>}<button type="button" className={styles.learningExport} onClick={() => downloadJson(profile, "medbot-learning.json")}>Export learning JSON</button></section>
-            <section className={styles.card}><label className={styles.toggle}><input type="checkbox" checked={instructor} disabled={awaitingFeedback} onChange={event => setInstructor(event.target.checked)} />Instructor view</label><p className={styles.subtle}>Show the teaching checklist and guard observations.</p></section>
+            <section className={`${styles.card} ${styles.instructorCard}`}><label className={styles.toggle}><input type="checkbox" checked={instructor} disabled={awaitingFeedback} onChange={event => setInstructor(event.target.checked)} />Instructor view</label><span className={styles.chip}>For instructors and judges</span><p className={styles.subtle}>Shows the answer key: every fact the patient can disclose and the consistency check. Keep it off while practising.</p></section>
             {(instructor && (!ended || reflection)) && <><section className={`${styles.card} ${styles.facts}`} aria-labelledby="facts-title"><div className={styles.sectionTitle}><h2 id="facts-title">Disclosed facts</h2><span className={styles.count}>{revealed.size}/{selected?.facts.length ?? 0}</span></div><p className={styles.subtle}>The patient reveals their story as you ask.</p><progress className={styles.progress} value={revealed.size} max={selected?.facts.length || 1} aria-label="Facts disclosed" />
               {categories.map(category => <div className={styles.factGroup} key={category}><h3>{category}</h3><ul>{selected?.facts.filter(f => f.category === category).map(f => <li key={f.id} className={revealed.has(f.id) ? styles.disclosed : ""}><span className={styles.check} aria-hidden="true">{revealed.has(f.id) ? "✓" : ""}</span><span><span className="sr-only">{revealed.has(f.id) ? "Disclosed: " : "Not yet disclosed: "}</span>{f.lay}</span></li>)}</ul></div>)}
             </section>
@@ -460,12 +535,23 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
           </aside>
         </div>
         {ended && !reflection && <section className={`${styles.card} ${styles.summary}`} aria-labelledby="reflection-title">
-          <h2 id="reflection-title">Pause before feedback</h2><p>What is your main clinical concern, and how confident are you that you explored what matters? Use synthetic case details only; do not enter names.</p>
+          <span className={styles.eyebrow}>Step 3 of 4</span><h2 id="reflection-title">Pause before feedback</h2><p>What is your main clinical concern, and how confident are you that you explored what matters? Use synthetic case details only; do not enter names.</p>
           <form className={styles.reflection} onSubmit={submitReflection}><label htmlFor="concern">Main clinical concern<input id="concern" required maxLength={240} value={concern} onChange={event => setConcern(event.target.value)} /></label><label htmlFor="confidence">Confidence (1–5)<select id="confidence" value={confidence} onChange={event => setConfidence(Number(event.target.value))}>{[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}{n === 1 ? " · Very unsure" : n === 5 ? " · Very sure" : ""}</option>)}</select></label><button className={styles.secondary} type="submit" disabled={!concern.trim()}>Save reflection and see feedback</button></form>
         </section>}
-        {ended && reflection && <section className={`${styles.card} ${styles.summary}`} aria-labelledby="summary-title">
-          <div className={styles.summaryHead}><div><span className={styles.eyebrow}>Interview complete</span><h2 id="summary-title">Every question builds the picture.</h2></div><button type="button" className={styles.secondary} disabled={!messages.length} onClick={downloadTranscript}>Download transcript</button></div>
-          <p>Your concern: {reflection.reflection.concern} · Confidence {reflection.reflection.confidence}/5. <a href="/learning">Review your learning and next patient</a></p>
+        {ended && reflection && <section ref={feedback} className={`${styles.card} ${styles.summary}`} aria-labelledby="summary-title">
+          <div className={styles.summaryHead}><div><span className={styles.eyebrow}>Step 4 of 4 · Feedback</span><h2 id="summary-title">Every question builds the picture.</h2></div><button type="button" className={styles.secondary} disabled={!messages.length} onClick={downloadTranscript}>Download transcript</button></div>
+          <p>Your concern: {reflection.reflection.concern} · Confidence {reflection.reflection.confidence}/5.</p>
+          <div className={styles.next} aria-labelledby="next-title">
+            <h3 id="next-title">What next?</h3>
+            {awaitingFeedback ? <p className={styles.subtle} role="status">Your next patient is chosen when the feedback below is ready. It stays on this page.</p> : <>
+              {recommendation && nextCase && <p className={styles.subtle}>Recommended: {nextCase.patient.name}, {nextCase.title}{nextPersonality ? ` · ${nextPersonality.label}` : ""}. {recommendation.reasons[1]}</p>}
+              <div className={styles.nextActions}>
+                {recommendation && nextCase && <button type="button" className={styles.primary} onClick={() => practise(nextCase, recommendation.personalityId)}>Next recommended patient</button>}
+                {otherPersonalities.map(p => selected && <button type="button" key={p.id} className={styles.secondary} onClick={() => practise(selected, p.id)}>Repeat with “{p.label}” personality</button>)}
+                <a className={styles.secondary} href="/learning">See how your learning adapts</a>
+              </div>
+            </>}
+          </div>
           <div className={styles.summaryStats}><div><strong>{revealed.size}<small> / {selected?.facts.length}</small></strong><span>Facts covered</span></div><div><strong>{(selected?.facts.length ?? 0) - revealed.size}</strong><span>Still to explore</span></div><div><strong>{messages.filter(m => m.role === "patient").length}</strong><span>Patient turns</span></div>{(["voice", "text"] as const).map(kind => { const values = timings.filter(t => t.kind === kind).map(t => t.ms); return values.length ? <div key={kind}><strong>{duration(median(values))}</strong><span>Median {kind === "voice" ? "voice onset" : "text round trip"}</span></div> : null; })}</div>
           <div className={styles.summaryPanels}><div className={styles.coachWrap}><h3>Coach report</h3><CoachPanel state={coach} hasMessages={messages.some(m => m.text.trim())} onRetry={() => void loadCoach(generation.current)} /></div>
           <div className={styles.coachWrap}><h3>Anamnesis</h3><AnamnesisPanel state={anamnesis} onRetry={() => void loadAnamnesis(generation.current)} /></div></div>

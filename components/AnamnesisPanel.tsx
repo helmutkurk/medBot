@@ -1,5 +1,6 @@
 import type { AnamnesisReport } from "../lib/engine/index.ts";
 import { downloadJson } from "./download.ts";
+import { Progress } from "./Progress.tsx";
 import styles from "./AnamnesisPanel.module.css";
 
 export type AnamnesisState =
@@ -9,8 +10,8 @@ export type AnamnesisState =
 
 export function AnamnesisPanel({ state, onRetry }: { state: AnamnesisState; onRetry: () => void }) {
   if (state.status === "idle") return <p className={styles.muted}>Ask the patient a question to create an anamnesis.</p>;
-  if (state.status === "loading") return <p className={styles.muted} role="status">Drafting your anamnesis…</p>;
-  if (state.status === "error") return <div className={styles.danger} role="alert"><p>{state.message}</p><button type="button" onClick={onRetry}>Try again</button></div>;
+  if (state.status === "loading") return <Progress title="Drafting your anamnesis" seconds={10} stages={["Collecting what the patient disclosed", "Sorting findings into sections", "Writing the clinical note"]} />;
+  if (state.status === "error") return <div className={styles.danger} role="alert"><p>The anamnesis could not be created. {state.message}</p><button type="button" onClick={onRetry}>Try again</button></div>;
   if (state.status !== "ready") return null;
   const { report } = state;
   const completeness = Math.max(0, Math.min(100, Math.round(report.completeness)));

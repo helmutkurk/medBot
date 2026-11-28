@@ -1,5 +1,6 @@
 import { loadUsage } from "../../lib/server/usage.ts";
 import type { UsageTotals } from "../../lib/server/usage.ts";
+import { SiteHeader } from "../../components/SiteHeader.tsx";
 import styles from "../eval/page.module.css";
 import usageStyles from "./page.module.css";
 
@@ -20,10 +21,11 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
   const source = query === "app" || query === "eval" ? query : undefined;
   const usage = await loadUsage(source);
   return <>
-    <header className={styles.header}><nav aria-label="Main"><a className={styles.wordmark} href="/">medBot</a><div className={usageStyles.links}><a href="/eval">Eval</a><a href="/usage" aria-current="page">Usage</a><a href="/">Back to patients</a></div></nav></header>
+    <SiteHeader />
     <main className={styles.main}>
       <div className={styles.intro}><span className={styles.eyebrow}>Every call counts</span><h1>API usage.</h1><p>Watch token usage and estimated spend across interviews and evaluations.</p></div>
       <nav className={usageStyles.filters} aria-label="Usage source">{[{ label: "All calls", href: "/usage", value: undefined }, { label: "App", href: "/usage?source=app", value: "app" }, { label: "Eval", href: "/usage?source=eval", value: "eval" }].map(filter => <a key={filter.label} href={filter.href} aria-current={source === filter.value ? "page" : undefined}>{filter.label}</a>)}</nav>
+      <p className={styles.muted}><a href="/eval">Back to evidence</a></p>
       <p className={styles.footnote}>Costs are estimates, not a billing statement or spending cap. Unknown models show $0 and are excluded from estimated spend. Calls without reported usage show zero tokens; browser delivery failures and unreported transcription usage can leave totals incomplete. Reload for updates.</p>
       {!usage.totals.calls ? <section className={styles.card}><h2>No usage recorded yet</h2><p>Start an interview or run an evaluation, then reload this page to see API usage{source ? ` from ${source}` : ""}.</p></section> : <>
         <section className={styles.tiles} aria-label="Usage totals">{[

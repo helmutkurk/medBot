@@ -1,6 +1,7 @@
 import type { CoachReport } from "../lib/engine/index.ts";
 import { communicationSkills } from "../lib/case/types.ts";
 import { domainLabels } from "../lib/engine/learner.ts";
+import { Progress } from "./Progress.tsx";
 import styles from "./CoachPanel.module.css";
 
 export type CoachState =
@@ -24,8 +25,8 @@ function ScoreRing({ score }: { score: number }) {
 
 export function CoachPanel({ state, onRetry, hasMessages }: { state: CoachState; onRetry: () => void; hasMessages: boolean }) {
   if (state.status === "idle") return <p className={styles.note}>{hasMessages ? "The coach report will appear here." : "Ask the patient at least one question to receive coaching feedback."}</p>;
-  if (state.status === "loading") return <div className={styles.loading} role="status"><span className={styles.spinner} aria-hidden="true" />Reviewing your interview…</div>;
-  if (state.status === "error") return <div className={styles.error} role="alert"><p>{state.message}</p><button type="button" onClick={onRetry}>Try again</button></div>;
+  if (state.status === "loading") return <Progress title="Your coach is reviewing the interview" seconds={12} stages={["Reading your transcript", "Matching your questions to the case checklist", "Rating communication skills", "Writing personal feedback"]} />;
+  if (state.status === "error") return <div className={styles.error} role="alert"><p>The coach report could not be created. {state.message}</p><button type="button" onClick={onRetry}>Try again</button></div>;
   const { report } = state;
   return <div className={styles.report}>
     <div className={styles.top}>
