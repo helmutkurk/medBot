@@ -6,7 +6,7 @@ import { anamnesisReport, coachReport, guardTurn, listCases, loadCase, patientTu
 import { isRecord } from "../lib/case/validate.ts";
 import { DEFAULT_TEXT_MODEL, DEFAULT_PATIENT_MODEL, MissingApiKeyError, OpenAIError, requestStructured } from "../lib/engine/openai.ts";
 
-interface Arguments { n: number; turns: number; caseId?: string; personalityId?: string; md?: string }
+interface Arguments { n: number; turns: number; concurrency: number; caseIds?: string[]; personalityId?: string; md?: string }
 interface Metrics {
   factCoverage: number;
   coachScore: number;
@@ -33,24 +33,45 @@ interface FailedRun {
   error: { kind: string; message: string };
 }
 
-function parseArguments(args: string[]): Arguments {
-  const parsed: Arguments = { n: 3, turns: 12 };
+export function parseArguments(args: string[]): Arguments {
+  const parsed: Arguments = { n: 3, turns: 12, concurrency: 1 };
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
-    if (!["--n", "--turns", "--case", "--personality", "--md"].includes(flag ?? "")) throw new Error(`Unknown argument: ${flag}`);
+    if (!["--n", "--turns", "--concurrency", "--case", "--personality", "--md"].includes(flag ?? "")) throw new Error(`Unknown argument: ${flag}`);
     const value = args[++i];
     if (!value || value.startsWith("--")) throw new Error(`Missing value for ${flag}.`);
-    if (flag === "--case") parsed.caseId = value;
+    if (flag === "--case") {
+      const ids = value.split(",").map(id => id.trim());
+      if (ids.some(id => !id)) throw new Error("--case must contain non-empty, comma-separated case IDs.");
+      parsed.caseIds = [...new Set(ids)];
+    }
     else if (flag === "--personality") parsed.personalityId = value;
     else if (flag === "--md") parsed.md = value;
     else {
       const number = Number(value);
       if (!Number.isSafeInteger(number) || number < 1) throw new Error(`${flag} must be a positive integer.`);
       if (flag === "--n") parsed.n = number;
-      else parsed.turns = number;
+      else if (flag === "--concurrency") {
+        if (number > 6) throw new Error("--concurrency must be an integer from 1 to 6.");
+        parsed.concurrency = number;
+      } else parsed.turns = number;
     }
   }
   return parsed;
+}
+
+/** Workers claim jobs in input order; completion order never changes the returned order. */
+export async function workerPool<T, R>(jobs: T[], concurrency: number, work: (job: T) => Promise<R>): Promise<R[]> {
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 6) throw new Error("Concurrency must be an integer from 1 to 6.");
+  const results = new Array<R>(jobs.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, async () => {
+    while (next < jobs.length) {
+      const index = next++;
+      results[index] = await work(jobs[index]);
+    }
+  }));
+  return results;
 }
 
 export function percentile(values: number[], fraction: number): number {
@@ -148,10 +169,16 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
   if (!apiKey) throw new MissingApiKeyError();
   const opts: EngineOptions = { apiKey, model: process.env.OPENAI_TEXT_MODEL?.trim() || DEFAULT_TEXT_MODEL };
   const patientModel = process.env.OPENAI_PATIENT_MODEL?.trim() || DEFAULT_PATIENT_MODEL;
-  const summaries = (await listCases()).filter(c => !config.caseId || c.id === config.caseId);
+  const summaries = (await listCases()).filter(c => !config.caseIds || config.caseIds.includes(c.id));
   if (!summaries.length) throw new Error("No cases matched the filter.");
-  const runs: Run[] = [];
-  const failures: FailedRun[] = [];
+  const jobs: { c: PatientCase; p: Personality; run: number }[] = [];
+  for (const summary of summaries) {
+    const c = await loadCase(summary.id);
+    for (const p of c.personalities.filter(p => !config.personalityId || p.id === config.personalityId)) {
+      for (let run = 1; run <= config.n; run++) jobs.push({ c, p, run });
+    }
+  }
+  if (!jobs.length) throw new Error("No personalities matched the filter.");
   const now = new Date().toISOString();
   const directory = path.join(process.cwd(), "eval", "results");
   const basename = path.join(directory, now.replaceAll(":", "-"));
@@ -159,27 +186,25 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
   const output = `${basename}.json`;
   await mkdir(directory, { recursive: true });
   await writeFile(partial, "", { flag: "wx", mode: 0o600 });
-  for (const summary of summaries) {
-    const c = await loadCase(summary.id);
-    for (const p of c.personalities.filter(p => !config.personalityId || p.id === config.personalityId)) {
-      for (let n = 1; n <= config.n; n++) {
-        process.stderr.write(`Evaluating ${c.id}/${p.id} ${n}/${config.n} (openai)\n`);
-        let result: Run | FailedRun;
-        try {
-          result = await interview(c, p, n, config.turns, opts, patientModel);
-          runs.push(result);
-        } catch (error) {
-          result = { caseId: c.id, personalityId: p.id, run: n, error: error instanceof OpenAIError
-            ? { kind: error.kind, message: error.message }
-            : { kind: "unknown", message: "Interview failed unexpectedly." } };
-          failures.push(result);
-          process.stderr.write(`Interview failed (${result.error.kind}): ${c.id}/${p.id} ${n}/${config.n}\n`);
-        }
-        await appendFile(partial, JSON.stringify(result) + "\n");
-      }
+  let checkpoint = Promise.resolve();
+  const results = await workerPool(jobs, config.concurrency, async ({ c, p, run }): Promise<Run | FailedRun> => {
+    process.stderr.write(`Evaluating ${c.id}/${p.id} ${run}/${config.n} (openai)\n`);
+    let result: Run | FailedRun;
+    try {
+      result = await interview(c, p, run, config.turns, opts, patientModel);
+    } catch (error) {
+      result = { caseId: c.id, personalityId: p.id, run, error: error instanceof OpenAIError
+        ? { kind: error.kind, message: error.message }
+        : { kind: "unknown", message: "Interview failed unexpectedly." } };
+      process.stderr.write(`Interview failed (${result.error.kind}): ${c.id}/${p.id} ${run}/${config.n}\n`);
     }
-  }
-  if (!runs.length && !failures.length) throw new Error("No personalities matched the filter.");
+    // Persist every completion immediately, even while earlier jobs are still running.
+    checkpoint = checkpoint.then(() => appendFile(partial, JSON.stringify(result) + "\n"));
+    await checkpoint;
+    return result;
+  });
+  const runs = results.filter((result): result is Run => !("error" in result));
+  const failures = results.filter((result): result is FailedRun => "error" in result);
   const total = aggregate(runs);
   await writeFile(output, JSON.stringify({ timestamp: now, model: opts.model, patientModel, textModel: opts.model, mode: "openai", config, runs, failures, aggregate: total }, null, 2) + "\n", { flag: "wx" });
   const mode = `Mode: openai · patient model ${patientModel} · text model ${opts.model} · failures ${failures.length}`;

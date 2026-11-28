@@ -41,6 +41,9 @@ class BenchError extends Error {
   code: string;
   constructor(code: string) { super(code); this.code = code; }
 }
+class UnsupportedProbeError extends Error {
+  constructor(caseId: string) { super(`No supported fixed probes for case ${caseId}.`); }
+}
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const voices = ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"];
 
@@ -107,7 +110,7 @@ export function questionSuite(c: PatientCase): Probe[] {
   };
   const probe = falsePremises[c.id];
   // New cases need an authored contradicted premise, rather than a fabricated expectation.
-  if (!probe || !c.facts.some(f => f.id === probe.fact)) throw new Error(`No supported fixed probes for case ${c.id}.`);
+  if (!probe || !c.facts.some(f => f.id === probe.fact)) throw new UnsupportedProbeError(c.id);
   return [
     make("opening", "What brings you here today?", c.facts.filter(f => f.category === "complaint")),
     make("onset", onsetText, onset ? [onset] : []),
@@ -431,9 +434,18 @@ export function auditionPage(runs: BenchRun[], random = (max: number) => randomI
 }
 
 export async function runBenchmark(config: BenchConfig, cases: PatientCase[], apiKey: string, deps: Dependencies = {}): Promise<string> {
-  const selected = cases.flatMap(c => c.personalities.filter(p => config.personalityId === "all" || p.id === config.personalityId).map(p => ({ c, p })));
+  const selected = cases.flatMap(c => {
+    const personalities = c.personalities.filter(p => config.personalityId === "all" || p.id === config.personalityId);
+    if (!personalities.length) return [];
+    try { questionSuite(c); }
+    catch (error) {
+      if (config.caseId !== "all" || !(error instanceof UnsupportedProbeError)) throw error;
+      process.stderr.write(`Skipping voice benchmark case ${c.id}: no authored false-premise probe with a matching case fact.\n`);
+      return [];
+    }
+    return personalities.map(p => ({ c, p }));
+  });
   if (!selected.length) throw new Error("No case/personality matched the filters.");
-  for (const { c } of selected) questionSuite(c); // Validate probes before any paid requests.
   const timestamp = new Date().toISOString();
   const directory = path.resolve(config.out, `${timestamp.replaceAll(":", "-")}-${randomUUID().slice(0, 8)}`);
   await mkdir(directory, { recursive: true });

@@ -68,7 +68,7 @@ test("CLI validates the matrix and preserves defaults", () => {
   for (const args of [["--questions", "9"], ["--voices", ""], ["--prompt", "v2"], ["--models", "unknown"], ["--case"]]) assert.throws(() => parseArguments(args));
 });
 
-// Cases need an authored false premise before they can join the fixed suite; others must fail loudly.
+// Explicitly selected cases need an authored false premise; --case all skips unsupported cases.
 const probedCases = ["chest-tightness-01", "abdominal-pain-01", "multimorbid-dizziness", "thunderclap-headache"];
 test("eight fixed probes retain real fact triggers for every probed case", async () => {
   for (const summary of await listCases()) {
@@ -81,6 +81,35 @@ test("eight fixed probes retain real fact triggers for every probed case", async
     assert.ok(suite[5].factIds.length);
     for (const probe of suite) assert.deepEqual(probe.revealWhen, probe.factIds.map(id => current.facts.find(f => f.id === id)!.reveal_when));
   }
+});
+
+test("--case all skips unsupported probes once per case and benchmarks supported cases", async t => {
+  const { directory, requests } = await setup(t);
+  const notices: string[] = [];
+  t.mock.method(process.stderr, "write", (message: string) => { notices.push(message); return true; });
+  const unsupported = { ...c, id: "unprobed-synthetic-case" };
+  const missingFact = { ...c, facts: c.facts.filter(f => f.id !== "no_pain_urinating") };
+  let socket: StubWebSocket;
+  const output = await runBenchmark({ ...config, caseId: "all", out: directory }, [unsupported, c, missingFact], "placeholder-key", {
+    socketFactory: () => {
+      socket = new StubWebSocket(event => { if (event.type === "response.create") audioResponse(socket, "resp_supported", () => {}); });
+      return socket;
+    },
+  });
+  const result = JSON.parse(await readFile(path.join(output, "results.json"), "utf8"));
+  assert.equal(result.runs.length, 1);
+  assert.equal(result.runs[0].caseId, c.id);
+  assert.equal(requests.filter(request => request.url.endsWith("/client_secrets")).length, 1);
+  assert.equal(notices.filter(line => /Skipping voice benchmark case/.test(line)).length, 2);
+  assert.ok(notices.some(line => line.includes(unsupported.id) && line.includes("no authored false-premise probe")));
+});
+
+test("explicit unsupported cases and an all-unsupported matrix fail before API requests", async t => {
+  const { directory, requests } = await setup(t);
+  const unsupported = { ...c, id: "unprobed-synthetic-case" };
+  await assert.rejects(runBenchmark({ ...config, caseId: unsupported.id, out: directory }, [unsupported], "placeholder-key"), /No supported fixed probes/);
+  await assert.rejects(runBenchmark({ ...config, caseId: "all", out: directory }, [unsupported], "placeholder-key"), /No case\/personality matched/);
+  assert.equal(requests.length, 0);
 });
 
 test("session keeps app settings with manual turns and explicit PCM24 output", () => {

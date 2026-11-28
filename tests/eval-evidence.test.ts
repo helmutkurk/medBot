@@ -61,3 +61,62 @@ test("loader skips partial/in-progress files and reports proportions, voice tole
   assert.equal(v.guardCounts.contradiction, 1);
   assert.equal(v.model, "gpt-realtime");
 });
+
+test("voice evidence pools the latest 30-minute session, production model only, with unique cases", async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), "medbot-voice-evidence-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.mock.method(process, "cwd", () => directory);
+  const originalModel = process.env.OPENAI_REALTIME_MODEL;
+  delete process.env.OPENAI_REALTIME_MODEL;
+  t.after(() => {
+    if (originalModel === undefined) delete process.env.OPENAI_REALTIME_MODEL;
+    else process.env.OPENAI_REALTIME_MODEL = originalModel;
+  });
+  const voiceRun = (caseId: string, model: string, times: number[]) => ({ caseId, model, turns: [...times.map(firstAudioMs => ({ status: "ok", firstAudioMs })), { status: "error", firstAudioMs: 99999 }] });
+  const summary = (guardedMessages: number, contradiction: number, invented = 0) => ({ guardedMessages, guardCounts: { invented, contradiction, unprompted: 0, jargon: 0, out_of_character: 0 } });
+  async function report(timestamp: string, runs: unknown[], summaries: unknown[]) {
+    const name = `${timestamp.replaceAll(":", "-")}-test`;
+    const target = path.join(directory, "eval", "voice", name);
+    await mkdir(target, { recursive: true });
+    await writeFile(path.join(target, "results.json"), JSON.stringify({ timestamp, runs, summaries }));
+    return name;
+  }
+  // Include the exact boundary; do not chain a third report via its nearer neighbour.
+  await report("2026-11-28T11:29:59.999Z", [voiceRun("old", "gpt-realtime", [9999])], [summary(100, 100)]);
+  const boundary = await report("2026-11-28T11:30:00.000Z", [voiceRun("a", "gpt-realtime", [100, 200, 300])], [summary(3, 1)]);
+  const middle = await report("2026-11-28T11:45:00.000Z", [voiceRun("b", "gpt-realtime-mini", [8888]), voiceRun("b", "gpt-realtime", [400])], [summary(100, 100), summary(1, 2)]);
+  const newest = await report("2026-11-28T12:00:00.000Z", [voiceRun("a", "gpt-realtime", [1000]), voiceRun("c", "gpt-realtime", [2000]), voiceRun("unknown", "", [7777])], [summary(1, 0, 1), summary(1, 0), summary(100, 100), summary(100, 100)]);
+  await report("2026-11-28T14:00:00.000Z", [voiceRun("mini-only", "gpt-realtime-mini", [6666])], [summary(1, 1)]);
+  await report("2026-11-28T15:00:00.000Z", [], []);
+  const malformed = path.join(directory, "eval", "voice", "2026-11-28T16-00-00.000Z-partial");
+  await mkdir(malformed, { recursive: true });
+  await writeFile(path.join(malformed, "results.json"), "{");
+  const evidence = (await loadLatestVoice())!;
+  assert.equal(evidence.directory, newest);
+  assert.deepEqual(evidence.directories, [newest, middle, boundary]);
+  assert.equal(evidence.timestamp, "2026-11-28T12:00:00.000Z");
+  assert.equal(evidence.model, "gpt-realtime");
+  assert.equal(evidence.caseCount, 3);
+  assert.equal(evidence.turns, 6);
+  assert.equal(evidence.firstAudioP50Ms, 300);
+  assert.equal(evidence.firstAudioP95Ms, 2000);
+  assert.equal(evidence.guardedMessages, 6);
+  assert.deepEqual(evidence.guardCounts, { invented: 1, contradiction: 3, unprompted: 0, jargon: 0, out_of_character: 0 });
+
+  process.env.OPENAI_REALTIME_MODEL = " gpt-realtime-mini ";
+  const mini = (await loadLatestVoice())!;
+  assert.equal(mini.caseCount, 1);
+  assert.equal(mini.turns, 1);
+  assert.equal(mini.firstAudioP50Ms, 6666);
+  assert.equal(mini.model, "gpt-realtime-mini");
+});
+
+test("voice evidence returns null without valid production audio", async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), "medbot-voice-empty-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.mock.method(process, "cwd", () => directory);
+  const target = path.join(directory, "eval", "voice", "2026-11-28T12-00-00.000Z-test");
+  await mkdir(target, { recursive: true });
+  await writeFile(path.join(target, "results.json"), JSON.stringify({ runs: [{ model: process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime", caseId: "a", turns: [{ status: "error", firstAudioMs: 1 }, { status: "ok", firstAudioMs: null }] }] }));
+  assert.equal(await loadLatestVoice(), null);
+});

@@ -16,7 +16,7 @@ export interface EvalEvidence {
 }
 export interface WilsonInterval { p: number; low: number; high: number }
 export interface VoiceEvidence {
-  directory: string; timestamp: string | null; model: string | null; turns: number;
+  directory: string; directories: string[]; timestamp: string | null; model: string | null; turns: number; caseCount: number;
   firstAudioP50Ms: number; firstAudioP95Ms: number; guardedMessages: number;
   guardCounts: { invented: number; contradiction: number; unprompted: number; jargon: number; out_of_character: number };
 }
@@ -137,37 +137,43 @@ async function parseEval(directory: string, filename: string): Promise<EvalEvide
 }
 
 const issueKeys = ["invented", "contradiction", "unprompted", "jargon", "out_of_character"] as const;
-function pooledPercentile(values: number[], fraction: number): number { return percentile(values, fraction); }
-
-/** Latest voice benchmark report with a readable results.json; absence or malformed files yield null. */
+/** Pool production-model reports started within 30 minutes of the newest usable benchmark. */
 export async function loadLatestVoice(): Promise<VoiceEvidence | null> {
   const directory = path.join(process.cwd(), "eval", "voice");
   let names: string[];
-  try { names = (await readdir(directory)).sort().reverse(); } catch { return null; }
-  for (const name of names) {
+  try { names = await readdir(directory); } catch { return null; }
+  const production = process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime";
+  const reports = await Promise.all(names.map(async name => {
     try {
       const raw = record(JSON.parse(await readFile(path.join(directory, name, "results.json"), "utf8")));
-      // Evidence reflects the production voice model only (OPENAI_REALTIME_MODEL, default gpt-realtime).
-      const production = process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime";
+      // Benchmark directory names capture creation time, unaffected by later checkpoint writes.
+      const created = Date.parse(name.slice(0, 24).replace(/T(\d{2})-(\d{2})-(\d{2})/, "T$1:$2:$3"));
+      if (!Number.isFinite(created)) return null;
       const allRuns = (Array.isArray(raw.runs) ? raw.runs : []).map(record);
-      const keep = allRuns.map(run => run.model === undefined || run.model === production);
-      const runs = allRuns.filter((_, i) => keep[i]);
+      const runs = allRuns.filter(run => run.model === production);
+      if (!runs.length) return null;
+      const summaries = (Array.isArray(raw.summaries) ? raw.summaries : []).map(record).filter((_, i) => allRuns[i]?.model === production);
       const turns = runs.flatMap(run => (Array.isArray(run.turns) ? run.turns : []).map(record));
       const first = turns.filter(t => t.status === "ok").flatMap(t => number(t.firstAudioMs) === undefined ? [] : [t.firstAudioMs as number]);
-      if (!first.length) continue;
-      const guardCounts = { invented: 0, contradiction: 0, unprompted: 0, jargon: 0, out_of_character: 0 };
-      let guardedMessages = 0;
-      for (const summary of (Array.isArray(raw.summaries) ? raw.summaries : []).map(record).filter((_, i) => keep[i] ?? true)) {
-        guardedMessages += number(summary.guardedMessages) ?? 0;
-        const counts = record(summary.guardCounts);
-        for (const key of issueKeys) guardCounts[key] += number(counts[key]) ?? 0;
-      }
-      const models = [...new Set(runs.map(run => run.model).filter((m): m is string => typeof m === "string"))];
-      return {
-        directory: name, timestamp: typeof raw.timestamp === "string" ? raw.timestamp : null, model: models.length ? models.join(", ") : null,
-        turns: first.length, firstAudioP50Ms: pooledPercentile(first, 0.5), firstAudioP95Ms: pooledPercentile(first, 0.95), guardedMessages, guardCounts,
-      };
-    } catch { /* absent or still being written: try the next one */ }
+      return { name, created, timestamp: typeof raw.timestamp === "string" ? raw.timestamp : null, runs, summaries, first };
+    } catch { return null; } // Absent or still being written.
+  }));
+  const ordered = reports.filter(report => report !== null).sort((a, b) => b.created - a.created || b.name.localeCompare(a.name));
+  const newest = ordered[0];
+  if (!newest) return null;
+  const session = ordered.filter(report => newest.created - report.created <= 30 * 60_000);
+  const first = session.flatMap(report => report.first);
+  if (!first.length) return null;
+  const guardCounts = { invented: 0, contradiction: 0, unprompted: 0, jargon: 0, out_of_character: 0 };
+  let guardedMessages = 0;
+  for (const summary of session.flatMap(report => report.summaries)) {
+    guardedMessages += number(summary.guardedMessages) ?? 0;
+    const counts = record(summary.guardCounts);
+    for (const key of issueKeys) guardCounts[key] += number(counts[key]) ?? 0;
   }
-  return null;
+  const caseIds = new Set(session.flatMap(report => report.runs).flatMap(run => typeof run.caseId === "string" && run.caseId.trim() ? [run.caseId] : []));
+  return {
+    directory: newest.name, directories: session.map(report => report.name), timestamp: newest.timestamp, model: production, caseCount: caseIds.size,
+    turns: first.length, firstAudioP50Ms: percentile(first, 0.5), firstAudioP95Ms: percentile(first, 0.95), guardedMessages, guardCounts,
+  };
 }
