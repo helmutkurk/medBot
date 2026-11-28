@@ -1,7 +1,7 @@
 import { estimateCost } from "../../../lib/engine/pricing.ts";
 import { recordTrace } from "../../../lib/engine/trace.ts";
 import { buildRealtimeInstructions, buildRealtimeSpeed, buildRevealFactTool } from "../../../lib/case/prompt.ts";
-import { getModels, openAIHeaders, requireOpenAIKey } from "../../../lib/server/env.ts";
+import { getModels, getTurnDetection, openAIHeaders, requireOpenAIKey } from "../../../lib/server/env.ts";
 import { body, HttpError, interviewFrom, json, requestSignal, route } from "../../../lib/server/http.ts";
 
 export const runtime = "nodejs";
@@ -24,7 +24,7 @@ export function POST(request: Request) {
             instructions: buildRealtimeInstructions(c, p),
             output_modalities: ["audio"],
             audio: {
-              input: { transcription: { model: models.transcription }, turn_detection: { type: "semantic_vad", eagerness: "high", create_response: true, interrupt_response: true } },
+              input: { transcription: { model: models.transcription }, turn_detection: getTurnDetection() },
               output: { voice: p.voice, speed: buildRealtimeSpeed(p) },
             },
             tools: [buildRevealFactTool(c, true)], tool_choice: "auto",

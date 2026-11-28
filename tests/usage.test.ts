@@ -106,7 +106,7 @@ test("turn timings persist without private data or inflating usage calls/tokens"
   const directory = await isolate(t);
   const turn = {
     operation: "realtime", kind: "turn", status: "ok", caseId: "case-1", personalityId: "quiet",
-    latencyMs: 1000, inputTokens: 0, outputTokens: 0, turnId: "turn_offline-1", interrupted: false,
+    latencyMs: 1000, micSilenceToAudibleMs: 800, micSilenceToAudibleP50Ms: 800, micSilenceToAudibleP95Ms: 1400, feltSampleCount: 3, sessionId: "session_offline-1", inputTokens: 0, outputTokens: 0, turnId: "turn_offline-1", interrupted: false,
     speechToFirstAudioDeltaMs: 220, speechToFirstAudioBufferMs: 240, speechToFirstTranscriptDeltaMs: 180,
     speechToFirstToolCallMs: 300, toolAckMs: 1, toolCallCount: 2,
   };
@@ -118,6 +118,10 @@ test("turn timings persist without private data or inflating usage calls/tokens"
   assert.equal(summary.byOperation[0]?.calls, 1);
   assert.equal(summary.byModel.reduce((total, row) => total + row.calls, 0), 1);
   assert.equal(summary.recent[0]?.kind, "turn");
+  assert.equal(summary.recent[0]?.micSilenceToAudibleMs, 800);
+  assert.equal(summary.recent[0]?.micSilenceToAudibleP95Ms, 1400);
+  assert.equal(summary.recent[0]?.feltSampleCount, 3);
+  assert.equal(summary.recent[0]?.sessionId, "session_offline-1");
   assert.equal(summary.recent[0]?.speechToFirstAudioDeltaMs, 220);
   assert.equal(summary.recent[0]?.speechToFirstTranscriptDeltaMs, 180);
   assert.equal(summary.recent[0]?.toolAckMs, 1);
@@ -128,6 +132,8 @@ test("turn timings persist without private data or inflating usage calls/tokens"
     { speechToFirstAudioBufferMs: 1001 }, { toolCallCount: 1.5 }, { toolAckMs: null },
     { turnId: "PRIVATE TEXT" }, { interrupted: "true" }, { inputTokens: 1 }, { usageMissing: false },
     { transcript: "PRIVATE" }, { kind: "response" },
+    { micSilenceToAudibleMs: -1 }, { micSilenceToAudibleMs: 1001 }, { micSilenceToAudibleP95Ms: "PRIVATE" },
+    { sessionId: "PRIVATE TEXT" }, { feltSampleCount: 1.5 },
   ]) assert.equal((await post({ ...turn, ...change })).status, 400, JSON.stringify(change));
   assert.equal((await loadUsage()).recent.length, 2);
 });

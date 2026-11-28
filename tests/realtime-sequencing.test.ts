@@ -31,15 +31,33 @@ async function harness(t: TestContext) {
   const errors: string[] = [];
   const statuses: string[] = [];
   const channel = { readyState: "open", onopen: () => {}, onmessage: (_event: { data: string }) => {}, send: (data: string) => { sent.push(JSON.parse(data)); }, close() {} };
+  let currentPeer: Peer;
   class Peer {
+    ontrack = (_event: { streams: unknown[] }) => {};
+    constructor() { currentPeer = this; }
+    addTrack() {}
     createDataChannel() { return channel; }
     async createOffer() { return { sdp: "offline-offer" }; }
     async setLocalDescription() {}
     async setRemoteDescription() { channel.onopen(); }
     close() {}
   }
+  let nextFrame: (() => void) | undefined;
+  let mic = 0;
+  let remote = 0;
+  let analyserCount = 0;
   const globals = {
-    Audio: class { autoplay = false; pause() {} },
+    Audio: class { autoplay = false; paused = true; pause() { this.paused = true; } async play() { this.paused = false; } },
+    AudioContext: class {
+      state = "running";
+      async resume() {} async close() {}
+      createMediaStreamSource() { return { connect() {} }; }
+      createAnalyser() {
+        const isMic = analyserCount++ === 0;
+        return { fftSize: 1024, getByteTimeDomainData(samples: Uint8Array) { samples.fill(128 + (isMic ? mic : remote)); } };
+      }
+    },
+    requestAnimationFrame: (callback: () => void) => { nextFrame = callback; return 1; },
     navigator: { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) } },
     window: { RTCPeerConnection: Peer, setTimeout }, RTCPeerConnection: Peer, cancelAnimationFrame() {},
   };
@@ -51,7 +69,7 @@ async function harness(t: TestContext) {
   let now = 0;
   t.mock.method(performance, "now", () => now);
   t.mock.method(globalThis, "fetch", async (url: unknown, init?: RequestInit) => {
-    if (url === "/api/session") return Response.json({ clientSecret: "offline-key" });
+    if (url === "/api/session") return Response.json({ clientSecret: "offline-key", expiresAt: Date.now() / 1000 + 600 });
     if (url === "https://api.openai.com/v1/realtime/calls") return new Response("offline-answer");
     assert.equal(url, "/api/trace");
     assert.equal(init?.keepalive, true);
@@ -60,11 +78,13 @@ async function harness(t: TestContext) {
   });
   client = new RealtimeInterview({ onStatus: s => { statuses.push(s); }, onMessage() {}, onFact: id => { facts.push(id); }, onLatency: ms => { latencies.push(ms); }, onLevel() {}, onError: error => { errors.push(error); }, onDisconnect() {} }, ["fact_a", "fact_b"]);
   await client.start("case-1", "quiet");
+  currentPeer!.ontrack({ streams: [{}] });
+  const sample = (time: number, micAmplitude: number, remoteAmplitude: number) => { now = time; mic = micAmplitude; remote = remoteAmplitude; nextFrame?.(); };
   const emit = (event: unknown, time = now) => { now = time; channel.onmessage({ data: JSON.stringify(event) }); };
   const created = (id: string) => emit({ type: "response.created", response: { id } });
   const tool = (response_id: string, call_id = "call-a", fact_id = "fact_a") => emit({ type: "response.function_call_arguments.done", response_id, call_id, name: "reveal_fact", arguments: JSON.stringify({ fact_id }) });
   const done = (id: string, status = "completed", output: unknown[] = []) => emit({ type: "response.done", response: { id, status, output, usage: { input_tokens: 10, output_tokens: 5 } } });
-  return { client, emit, created, tool, done, sent, reports, facts, latencies, errors, statuses };
+  return { client, sample, emit, created, tool, done, sent, reports, facts, latencies, errors, statuses };
 }
 
 for (const audioType of ["response.output_audio.delta", "response.audio.delta", "response.output_audio_transcript.delta", "response.audio_transcript.delta", "output_audio_buffer.started"]) {
@@ -96,7 +116,7 @@ test("tool-only responses continue once; full response output recovers missed to
   h.done("r2", "completed", [{ ...call, call_id: "call-b" }, { type: "message", content: [{ type: "audio", transcript: "PRIVATE" }] }]);
   h.emit({ type: "output_audio_buffer.stopped", response_id: "r2" }, 500);
   assert.equal(h.sent.filter(e => e.type === "response.create").length, 1);
-  assert.deepEqual(h.latencies, [200]);
+  assert.deepEqual(h.latencies, []); // Provider events never substitute for felt audio.
   const timing = h.reports.find(r => r.kind === "turn");
   assert.equal(timing?.speechToFirstAudioBufferMs, 200);
   assert.equal(timing?.speechToFirstTranscriptDeltaMs, 150);
@@ -128,7 +148,7 @@ test("cancellation/failure and a late old response cannot restart an interrupted
   h.emit({ type: "response.output_audio_transcript.delta", response_id: "new", delta: "new" }, 450);
   h.client.close();
   assert.equal(h.sent.filter(e => e.type === "response.create").length, 0);
-  assert.deepEqual(h.latencies, [100]);
+  assert.deepEqual(h.latencies, []);
   const turns = h.reports.filter(r => r.kind === "turn");
   assert.equal(turns[0]?.interrupted, true);
   assert.equal(turns[1]?.speechToFirstAudioDeltaMs, 100);
@@ -141,4 +161,45 @@ test("invalid tool calls get one failure acknowledgement and a tool-only fallbac
   assert.deepEqual(h.facts, []);
   assert.equal(h.sent.filter(e => e.item?.output === '{"ok":false}').length, 1);
   assert.equal(h.sent.filter(e => e.type === "response.create").length, 1);
+});
+
+
+test("felt latency includes VAD wait and real track onset, once per turn", async t => {
+  const h = await harness(t);
+  h.emit({ type: "input_audio_buffer.speech_started" }, 0);
+  h.sample(100, 8, 0);
+  h.sample(200, 0, 0); // Too short for the 120 ms silence hangover.
+  h.sample(230, 0, 0);
+  h.emit({ type: "input_audio_buffer.speech_stopped" }, 500);
+  h.created("r1");
+  h.emit({ type: "output_audio_buffer.started", response_id: "r1" }, 700);
+  assert.deepEqual(h.latencies, []);
+  h.sample(720, 0, 8);
+  h.sample(750, 0, 8);
+  h.sample(800, 0, 8);
+  h.emit({ type: "output_audio_buffer.stopped", response_id: "r1" }, 1000);
+  assert.deepEqual(h.latencies, [620]);
+  const trace = h.reports.find(r => r.kind === "turn");
+  assert.equal(trace?.micSilenceToAudibleMs, 620);
+  assert.equal(trace?.speechToFirstAudioBufferMs, 200);
+  assert.equal(trace?.micSilenceToAudibleP50Ms, 620);
+  assert.equal(trace?.micSilenceToAudibleP95Ms, 620);
+  assert.equal(trace?.feltSampleCount, 1);
+  assert.match(String(trace?.sessionId), /^session_/);
+});
+
+test("interruption flushes timing and residual old audio cannot fill the next turn", async t => {
+  const h = await harness(t);
+  h.sample(100, 8, 0); h.sample(230, 0, 0);
+  h.emit({ type: "input_audio_buffer.speech_stopped" }, 400); h.created("old");
+  h.sample(450, 0, 8); h.sample(480, 0, 8);
+  h.emit({ type: "input_audio_buffer.speech_started" }, 490);
+  h.sample(500, 8, 8); h.sample(630, 0, 8);
+  h.emit({ type: "input_audio_buffer.speech_stopped" }, 700); h.created("new");
+  h.sample(730, 0, 8); // Old continuous audio is not a new onset.
+  assert.deepEqual(h.latencies, [350]);
+  h.sample(750, 0, 0); h.sample(900, 0, 8); h.sample(930, 0, 8);
+  assert.deepEqual(h.latencies, [350, 400]);
+  h.client.close();
+  assert.equal(h.reports.filter(r => r.kind === "turn")[0]?.interrupted, true);
 });

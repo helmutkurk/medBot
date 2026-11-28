@@ -30,7 +30,7 @@ test("Realtime events report metadata once, preserve audio/cache counts and surv
   const errors: string[] = [];
   let rejectTrace = false;
   t.mock.method(globalThis, "fetch", async (url: unknown, init?: RequestInit) => {
-    if (url === "/api/session") return Response.json({ clientSecret: "PRIVATE KEY" });
+    if (url === "/api/session") return Response.json({ clientSecret: "PRIVATE KEY", expiresAt: Date.now() / 1000 + 600 });
     if (url === "https://api.openai.com/v1/realtime/calls") return new Response("test answer");
     assert.equal(url, "/api/trace"); assert.equal(init?.keepalive, true); assert.equal(init?.signal, undefined);
     const text = String(init?.body);

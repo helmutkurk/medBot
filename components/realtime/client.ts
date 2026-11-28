@@ -1,5 +1,7 @@
 import { isRecord } from "../../lib/case/validate.ts";
 import type { RealtimeTurnTiming } from "../../lib/engine/trace.ts";
+import { TurnEnergy } from "./energy.ts";
+import { RealtimePreparation } from "./prepare.ts";
 import { needsAudioFollowUp } from "./response.ts";
 import type { ResponseProgress } from "./response.ts";
 
@@ -30,12 +32,16 @@ export class RealtimeInterview {
   private responseStarted = new Map<string, number>();
   private tracedResponses = new Set<string>();
   private traceWarningShown = false;
-  private turnStarted: number | null = null;
+  private energy = new TurnEnergy();
+  private micSilence: number | null = null;
+  private feltSamples: number[] = [];
+  private sessionId = `session_${crypto.randomUUID()}`;
+  private preparation: RealtimePreparation | null = null;
   private outputPlaying = false;
   private responses = new Map<string, ResponseProgress>();
   private activeResponse: string | null = null;
   private turn = 0;
-  private turnTiming: { started: number; turn: number; id: string; metrics: RealtimeTurnTiming } | null = null;
+  private turnTiming: { started: number; turn: number; id: string; metrics: RealtimeTurnTiming; micSilence: number | null } | null = null;
   private handledCalls = new Set<string>();
   private seenMessages = new Set<string>();
   private callbacks: VoiceCallbacks;
@@ -48,25 +54,22 @@ export class RealtimeInterview {
     this.audio.autoplay = true;
   }
 
-  async start(caseId: string, personalityId: string): Promise<void> {
+  async start(caseId: string, personalityId: string, preparation = new RealtimePreparation(caseId, personalityId)): Promise<void> {
     this.caseId = caseId;
     this.personalityId = personalityId;
     this.callbacks.onStatus("Connecting");
     try {
-      if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw new Error("Voice needs a supported browser on HTTPS or localhost. You can still type below.");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-      if (this.closed) { stream.getTracks().forEach(track => track.stop()); return; }
+      if (preparation.caseId !== caseId || preparation.personalityId !== personalityId) throw new Error("Voice selection changed. Please start again.");
+      this.preparation = preparation;
+      // Resume Web Audio in the Start gesture, before any asynchronous work.
+      try { this.context = new AudioContext(); void this.context.resume().catch(() => undefined); } catch { /* Audio playback can still work without metering. */ }
+      const { stream, peer, channel, offer, clientSecret } = await preparation.take();
+      if (this.closed) { stream.getTracks().forEach(track => track.stop()); channel.close(); peer.close(); return; }
       this.stream = stream;
-      this.meter(stream);
-      const response = await fetch("/api/session", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ caseId, personalityId }), signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(30_000)]),
-      });
-      if (!response.ok) throw new Error("Voice is unavailable. Check your API key and quota, or continue in text mode.");
-      const { clientSecret } = await response.json() as { clientSecret: string };
-      if (this.closed) return;
-      const peer = new RTCPeerConnection();
       this.peer = peer;
+      this.channel = channel;
+      stream.getTracks().forEach(track => { track.enabled = true; });
+      this.meter(stream);
       peer.ontrack = event => {
         const remote = event.streams[0] ?? new MediaStream([event.track]);
         this.audio.srcObject = remote;
@@ -77,11 +80,8 @@ export class RealtimeInterview {
         if (!this.closed && (peer.connectionState === "failed" || peer.connectionState === "disconnected" || peer.connectionState === "closed")) this.fail("Voice disconnected. Continue in text mode or start a new interview.");
       };
       stream.getTracks().forEach(track => {
-        peer.addTrack(track, stream);
         track.onended = () => { if (!this.closed) this.fail("Microphone access ended. You can continue by typing."); };
       });
-      const channel = peer.createDataChannel("oai-events");
-      this.channel = channel;
       const opened = new Promise<void>((resolve, reject) => {
         const timer = window.setTimeout(() => reject(new Error("Voice connection timed out. Please use text mode or try again.")), 20_000);
         const aborted = () => { clearTimeout(timer); reject(new DOMException("Stopped", "AbortError")); };
@@ -97,8 +97,6 @@ export class RealtimeInterview {
       channel.onmessage = event => this.receive(event.data);
       channel.onerror = () => this.fail("The voice connection encountered an error. Text mode is still available.");
       channel.onclose = () => { if (!this.closed) this.fail("Voice disconnected. Text mode is still available."); };
-      const offer = await peer.createOffer();
-      await peer.setLocalDescription(offer);
       const answer = await fetch("https://api.openai.com/v1/realtime/calls", {
         method: "POST", body: offer.sdp,
         headers: { Authorization: `Bearer ${clientSecret}`, "Content-Type": "application/sdp" },
@@ -131,7 +129,6 @@ export class RealtimeInterview {
     const id = `student_${crypto.randomUUID()}`;
     this.send({ type: "conversation.item.create", item: { id, type: "message", role: "user", content: [{ type: "input_text", text }] } });
     this.callbacks.onMessage("student", text, id);
-    this.turnStarted = performance.now();
     this.send({ type: "response.create" });
     this.callbacks.onStatus("Thinking");
   }
@@ -152,15 +149,13 @@ export class RealtimeInterview {
       case "input_audio_buffer.speech_started":
         this.finishTurnTiming(true);
         this.interruptResponses();
-        this.turnStarted = null;
         this.outputPlaying = false;
         this.callbacks.onStatus("Listening");
         break;
       case "input_audio_buffer.speech_stopped":
         this.finishTurnTiming();
         this.turn++;
-        this.turnStarted = performance.now();
-        this.turnTiming = { started: this.turnStarted, turn: this.turn, id: `turn_${crypto.randomUUID()}`, metrics: { toolCallCount: 0, toolAckMs: 0 } };
+        this.turnTiming = { started: performance.now(), turn: this.turn, id: `turn_${crypto.randomUUID()}`, metrics: { toolCallCount: 0, toolAckMs: 0 }, micSilence: this.micSilence };
         this.callbacks.onStatus("Thinking");
         break;
       case "input_audio_buffer.committed":
@@ -174,10 +169,6 @@ export class RealtimeInterview {
       case "response.audio.delta":
         if (!this.noteResponseAudio(event)) break;
         this.noteTurnTiming(event, event.type === "output_audio_buffer.started" ? "speechToFirstAudioBufferMs" : "speechToFirstAudioDeltaMs");
-        if (this.turnStarted !== null) {
-          this.callbacks.onLatency(performance.now() - this.turnStarted);
-          this.turnStarted = null;
-        }
         this.callbacks.onStatus("Patient speaking");
         this.outputPlaying = true;
         break;
@@ -311,7 +302,8 @@ export class RealtimeInterview {
     this.turnTiming = null;
     this.postTrace({
       operation: "realtime", kind: "turn", status: "ok", caseId: this.caseId, personalityId: this.personalityId,
-      latencyMs: performance.now() - timing.started, inputTokens: 0, outputTokens: 0,
+      latencyMs: performance.now() - Math.min(timing.started, timing.micSilence ?? timing.started), inputTokens: 0, outputTokens: 0,
+      sessionId: this.sessionId,
       turnId: timing.id, ...timing.metrics, interrupted,
     });
   }
@@ -361,7 +353,7 @@ export class RealtimeInterview {
   private level(analyser: AnalyserNode, samples: Uint8Array<ArrayBuffer>): number {
     analyser.getByteTimeDomainData(samples);
     const power = samples.reduce((sum, sample) => sum + ((sample - 128) / 128) ** 2, 0) / samples.length;
-    return Math.min(1, Math.sqrt(power) * 5);
+    return Math.sqrt(power);
   }
 
   private watchOutput(stream: MediaStream): void {
@@ -369,7 +361,7 @@ export class RealtimeInterview {
       const context = this.context ?? new AudioContext();
       this.context = context;
       const analyser = context.createAnalyser();
-      analyser.fftSize = 256;
+      analyser.fftSize = 1024;
       // Analysis only: playback stays on the audio element.
       context.createMediaStreamSource(stream).connect(analyser);
       this.outAnalyser = analyser;
@@ -382,17 +374,35 @@ export class RealtimeInterview {
       this.context = context;
       void context.resume().catch(() => undefined);
       const analyser = context.createAnalyser();
-      analyser.fftSize = 256;
+      analyser.fftSize = 1024;
       context.createMediaStreamSource(stream).connect(analyser);
       const micSamples = new Uint8Array(new ArrayBuffer(analyser.fftSize));
-      const outSamples = new Uint8Array(new ArrayBuffer(256));
+      const outSamples = new Uint8Array(new ArrayBuffer(1024));
       let smoothMic = 0;
       let smoothOut = 0;
       const tick = () => {
         if (this.closed) return;
-        smoothMic += (this.level(analyser, micSamples) - smoothMic) * 0.3;
-        const out = this.outAnalyser && this.outputPlaying ? this.level(this.outAnalyser, outSamples) : 0;
-        smoothOut += (out - smoothOut) * 0.3;
+        const mic = this.level(analyser, micSamples);
+        const out = this.outAnalyser && !this.audio.paused && context.state === "running" ? this.level(this.outAnalyser, outSamples) : 0;
+        const { silenceAt, audibleAt } = this.energy.sample(performance.now(), mic, out);
+        this.micSilence = silenceAt;
+        const timing = this.turnTiming;
+        if (timing && timing.metrics.micSilenceToAudibleMs === undefined) {
+          // Continued microphone speech supersedes the earlier silence boundary.
+          timing.micSilence = silenceAt;
+          if (silenceAt !== null && audibleAt !== null && audibleAt >= silenceAt) {
+            const ms = audibleAt - silenceAt;
+            timing.metrics.micSilenceToAudibleMs = ms;
+            this.feltSamples.push(ms);
+            const sorted = [...this.feltSamples].sort((a, b) => a - b);
+            timing.metrics.feltSampleCount = sorted.length;
+            timing.metrics.micSilenceToAudibleP50Ms = sorted[Math.ceil(sorted.length * 0.5) - 1];
+            timing.metrics.micSilenceToAudibleP95Ms = sorted[Math.ceil(sorted.length * 0.95) - 1];
+            this.callbacks.onLatency(ms);
+          }
+        }
+        smoothMic += (Math.min(1, mic * 5) - smoothMic) * 0.3;
+        smoothOut += (Math.min(1, out * 5) - smoothOut) * 0.3;
         this.callbacks.onLevel(smoothMic, smoothOut);
         this.frame = requestAnimationFrame(tick);
       };
@@ -411,6 +421,7 @@ export class RealtimeInterview {
     this.finishTurnTiming(this.outputPlaying);
     this.closed = true;
     this.abort.abort();
+    this.preparation?.close();
     cancelAnimationFrame(this.frame);
     this.channel?.close();
     this.peer?.close();

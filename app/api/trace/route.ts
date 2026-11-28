@@ -8,7 +8,7 @@ import { body, HttpError, json, route } from "../../../lib/server/http.ts";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const tokenKeys = ["inputTokens", "outputTokens", "cachedTokens", "audioInputTokens", "audioOutputTokens", "cachedAudioTokens"] as const;
-const turnKeys = [...TURN_TIMING_KEYS, "toolCallCount", "turnId", "interrupted"];
+const turnKeys = [...TURN_TIMING_KEYS, "toolCallCount", "turnId", "sessionId", "feltSampleCount", "interrupted"];
 const allowed = new Set<string>(["operation", "kind", "usageMissing", "status", "latencyMs", "caseId", "personalityId", ...tokenKeys, ...turnKeys]);
 function invalid(): never { throw new HttpError(400, "invalid_trace", "Invalid Realtime usage metadata."); }
 
@@ -24,10 +24,15 @@ export function POST(request: Request) {
       if (typeof data.turnId !== "string" || !/^turn_[a-zA-Z0-9_-]{1,100}$/.test(data.turnId) || typeof data.interrupted !== "boolean") invalid();
       if (typeof data.toolCallCount !== "number" || !Number.isSafeInteger(data.toolCallCount) || data.toolCallCount < 0 || data.toolCallCount > 10000) invalid();
       timing.toolCallCount = data.toolCallCount;
+      if (data.sessionId !== undefined && (typeof data.sessionId !== "string" || !/^session_[a-zA-Z0-9_-]{1,100}$/.test(data.sessionId))) invalid();
+      if (data.feltSampleCount !== undefined) {
+        if (typeof data.feltSampleCount !== "number" || !Number.isSafeInteger(data.feltSampleCount) || data.feltSampleCount < 1 || data.feltSampleCount > 10000) invalid();
+        timing.feltSampleCount = data.feltSampleCount;
+      }
       for (const key of TURN_TIMING_KEYS) {
         const value = data[key];
         if (value === undefined) continue;
-        if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > data.latencyMs) invalid();
+        if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > (key === "micSilenceToAudibleP50Ms" || key === "micSilenceToAudibleP95Ms" ? 86_400_000 : data.latencyMs)) invalid();
         timing[key] = value;
       }
       if (tokenKeys.some(key => data[key] !== undefined && data[key] !== 0) || data.usageMissing !== undefined) invalid();
@@ -51,6 +56,7 @@ export function POST(request: Request) {
       latencyMs: data.latencyMs, caseId: String(data.caseId), personalityId: String(data.personalityId), source: "app",
       ...usage, ...estimateCost(model, usage), usageMissing: data.kind === "turn" ? undefined : data.usageMissing === true,
       kind: data.kind, ...timing,
+      sessionId: data.kind === "turn" && typeof data.sessionId === "string" ? data.sessionId : undefined,
       turnId: data.kind === "turn" && typeof data.turnId === "string" ? data.turnId : undefined,
       interrupted: data.kind === "turn" && typeof data.interrupted === "boolean" ? data.interrupted : undefined,
     });

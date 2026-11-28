@@ -10,8 +10,12 @@ export interface TraceContext {
   personalityId?: string;
   source?: "app" | "eval";
 }
-export const TURN_TIMING_KEYS = ["speechToFirstAudioDeltaMs", "speechToFirstAudioBufferMs", "speechToFirstTranscriptDeltaMs", "speechToFirstToolCallMs", "toolAckMs"] as const;
+export const TURN_TIMING_KEYS = ["micSilenceToAudibleMs", "micSilenceToAudibleP50Ms", "micSilenceToAudibleP95Ms", "speechToFirstAudioDeltaMs", "speechToFirstAudioBufferMs", "speechToFirstTranscriptDeltaMs", "speechToFirstToolCallMs", "toolAckMs"] as const;
 export interface RealtimeTurnTiming {
+  micSilenceToAudibleMs?: number;
+  micSilenceToAudibleP50Ms?: number;
+  micSilenceToAudibleP95Ms?: number;
+  feltSampleCount?: number;
   speechToFirstAudioDeltaMs?: number;
   speechToFirstAudioBufferMs?: number;
   speechToFirstTranscriptDeltaMs?: number;
@@ -35,6 +39,7 @@ export interface LlmTrace extends TokenUsage, Partial<RealtimeTurnTiming> {
   usageMissing?: boolean;
   kind?: "response" | "transcription" | "turn";
   turnId?: string;
+  sessionId?: string;
   interrupted?: boolean;
 }
 
@@ -51,7 +56,9 @@ export function traceFields(t: LlmTrace): LlmTrace {
     caseId: t.caseId, personalityId: t.personalityId, source: t.source,
     audioInputTokens: t.audioInputTokens, audioOutputTokens: t.audioOutputTokens, cachedAudioTokens: t.cachedAudioTokens,
     unknownModel: t.unknownModel, usageMissing: t.usageMissing,
-    kind: t.kind, turnId: t.turnId, interrupted: t.interrupted,
+    kind: t.kind, turnId: t.turnId, sessionId: t.sessionId, interrupted: t.interrupted,
+    micSilenceToAudibleMs: t.micSilenceToAudibleMs, feltSampleCount: t.feltSampleCount,
+    micSilenceToAudibleP50Ms: t.micSilenceToAudibleP50Ms, micSilenceToAudibleP95Ms: t.micSilenceToAudibleP95Ms,
     speechToFirstAudioDeltaMs: t.speechToFirstAudioDeltaMs, speechToFirstAudioBufferMs: t.speechToFirstAudioBufferMs,
     speechToFirstTranscriptDeltaMs: t.speechToFirstTranscriptDeltaMs, speechToFirstToolCallMs: t.speechToFirstToolCallMs,
     toolAckMs: t.toolAckMs, toolCallCount: t.toolCallCount,

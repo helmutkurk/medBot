@@ -20,6 +20,7 @@ import { SiteHeader } from "./SiteHeader.tsx";
 import { Steps } from "./Steps.tsx";
 import { CoachPanel } from "./CoachPanel.tsx";
 import type { CoachState } from "./CoachPanel.tsx";
+import { RealtimePreparation } from "./realtime/prepare.ts";
 import { RealtimeInterview } from "./realtime/client.ts";
 import type { VoiceStatus } from "./realtime/client.ts";
 import type { AnamnesisReport, CoachReport } from "../lib/engine/index.ts";
@@ -36,8 +37,8 @@ function median(values: number[]): number | null {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
-function duration(value: number | null | undefined): string {
-  return value == null ? "—" : value < 1000 ? `${Math.round(value)} ms` : `${(value / 1000).toFixed(2)} s`;
+function duration(value: number | null | undefined, milliseconds = false): string {
+  return value == null ? "—" : milliseconds || value < 1000 ? `${Math.round(value)} ms` : `${(value / 1000).toFixed(2)} s`;
 }
 
 async function post<T>(path: string, data: unknown, signal: AbortSignal): Promise<T> {
@@ -102,6 +103,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
   const patientSeen = useRef<Set<string>>(new Set());
   const startedAt = useRef(0);
   const voice = useRef<RealtimeInterview | null>(null);
+  const prewarmed = useRef<RealtimePreparation | null>(null);
   const orb = useRef<HTMLButtonElement>(null);
   const transcript = useRef<HTMLDivElement>(null);
   const requests = useRef<AbortController | null>(null);
@@ -175,7 +177,29 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     } finally { if (token === generation.current) setGuardPending(n => Math.max(0, n - 1)); }
   }
 
+  function warmSelection(nextCaseId: string, nextPersonalityId: string, gesture = false): RealtimePreparation {
+    let prepared = prewarmed.current;
+    if (!prepared || prepared.caseId !== nextCaseId || prepared.personalityId !== nextPersonalityId) {
+      prepared?.close();
+      prepared = new RealtimePreparation(nextCaseId, nextPersonalityId);
+      prewarmed.current = prepared;
+    }
+    void prepared.prefetch().catch(() => undefined); // Start surfaces failures, with text still available.
+    if (gesture) void prepared.prepare().catch(() => undefined);
+    return prepared;
+  }
+
+  useEffect(() => {
+    if (!caseId || !personalityId) return;
+    const prepared = warmSelection(caseId, personalityId);
+    return () => {
+      if (prewarmed.current === prepared) { prepared.close(); prewarmed.current = null; }
+    };
+  }, [caseId, personalityId]);
+
   function clearInterview(): void {
+    prewarmed.current?.close();
+    prewarmed.current = null;
     generation.current += 1;
     voice.current?.close();
     voice.current = null;
@@ -220,6 +244,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
 
   function practise(nextCase: InterviewCase, nextPersonalityId: string): void {
     clearInterview();
+    warmSelection(nextCase.id, nextPersonalityId, true);
     setCaseId(nextCase.id);
     setPersonalityId(nextPersonalityId);
     setGoals(recommendNext(profileRef.current, [nextCase], new Date().toISOString())?.goals ?? []);
@@ -261,6 +286,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
 
   useEffect(() => () => {
     generation.current += 1;
+    prewarmed.current?.close();
     voice.current?.close();
     requests.current?.abort();
     guardTimers.current.forEach(timer => clearTimeout(timer));
@@ -282,11 +308,13 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     if (reflection) scrollTo(feedback.current);
   }, [reflection]);
 
-  function chooseCase(c: InterviewCase): void {
+  function chooseCase(c: InterviewCase, gesture = true): void {
     clearInterview();
     const next = recommendNext(profileRef.current, [c], new Date().toISOString());
+    const nextPersonalityId = next?.personalityId ?? c.personalities[0]?.id ?? "";
+    warmSelection(c.id, nextPersonalityId, gesture);
     setCaseId(c.id);
-    setPersonalityId(next?.personalityId ?? c.personalities[0]?.id ?? "");
+    setPersonalityId(nextPersonalityId);
     setGoals(next?.goals ?? []);
   }
 
@@ -370,6 +398,8 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
 
   function startInterview(): void {
     if (!selected || active || busy) return;
+    const prepared = warmSelection(caseId, personalityId, true);
+    prewarmed.current = null; // Ownership transfers to the running interview.
     clearInterview();
     startedAt.current = performance.now();
     setActive("voice");
@@ -410,7 +440,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
       },
     }, selected.facts.map(f => f.id));
     voice.current = client;
-    void client.start(caseId, personalityId);
+    void client.start(caseId, personalityId, prepared);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -501,7 +531,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
             <span className={styles.avatar} aria-hidden="true">{initials(c.patient.name)}</span>
             <span className={styles.caseInfo}><strong>{c.patient.name}</strong><span>{c.patient.age} years · {c.patient.job}</span><span className={styles.caseTitle}><span className={styles.caseLabel}>Comes in with</span>{c.title}</span><span className={styles.chips}>{c.personalities.slice(0, 2).map(p => <span key={p.id} className={styles.chip}>{p.label}</span>)}</span></span><span className={styles.selectionMark} aria-hidden="true">{caseId === c.id ? "✓" : ""}</span>
           </button>)}<button type="button" disabled={locked} className={`${styles.caseCard} ${styles.newPatient}`} onClick={() => setCreating(true)}><span className={styles.avatar} aria-hidden="true">+</span><span className={styles.caseInfo}><strong>New patient</strong><span>Create a synthetic teaching case</span></span></button></div>
-          <div className={styles.personalityRow}><span className={styles.label}>Same facts, different person. Personality:</span><div className={styles.segmented} role="group" aria-label="Patient personality">{selected?.personalities.map(p => <button type="button" key={p.id} disabled={locked} aria-pressed={p.id === personalityId} onClick={() => { clearInterview(); setPersonalityId(p.id); }}>{p.label}</button>)}</div></div>
+          <div className={styles.personalityRow}><span className={styles.label}>Same facts, different person. Personality:</span><div className={styles.segmented} role="group" aria-label="Patient personality">{selected?.personalities.map(p => <button type="button" key={p.id} disabled={locked} aria-pressed={p.id === personalityId} onClick={() => { clearInterview(); warmSelection(caseId, p.id, true); setPersonalityId(p.id); }}>{p.label}</button>)}</div></div>
         </section>}
         <div className={styles.workspace} ref={workspace}>
           <section className={`${styles.card} ${styles.interview}`} aria-labelledby="interview-title">
@@ -520,7 +550,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
               {active === "voice" && status === "Connecting" && <span className={styles.connecting} aria-hidden="true" />}
               {slowConnect && active === "voice" && status === "Connecting" && <span className={styles.recover} role="alert">Taking longer than expected. <button type="button" className={styles.ghost} onClick={leaveVoice}>Continue in text</button></span>}
               {!active && <button type="button" className={styles.ghost} disabled={locked || !selected} onClick={startText}>or interview by text, no microphone</button>}
-              {last != null && <span className={styles.latency} title={timingKind === "voice" ? "From speech stopped to first patient audio event" : "From submitting text to receiving the complete reply"}>{timingKind === "voice" ? "Voice onset" : "Text round trip"} · Last {duration(last)} · Median {duration(typical)}</span>}
+              {last != null && <span className={styles.latency} title={timingKind === "voice" ? "From the last voiced microphone frame to first sustained patient track audio; excludes headset hardware delay" : "From submitting text to receiving the complete reply"}>{timingKind === "voice" ? "Voice felt" : "Text round trip"} · Last {duration(last, timingKind === "voice")} · Median {duration(typical, timingKind === "voice")}</span>}
             </div>
             {hint && <div className={`${styles.notice} ${styles.noticeWarn}`} role="status"><span>{hint}</span>{active === "text" && !messages.length && <button type="button" className={styles.ghost} onClick={startInterview}>Try voice again</button>}<button type="button" className={styles.ghost} onClick={() => setHint("")}>Dismiss</button></div>}
             <div ref={transcript} className={styles.transcript} role="log" aria-label="Interview transcript" aria-live="polite" aria-relevant="additions">
@@ -570,7 +600,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
           <div className={styles.coachWrap}><h3>Anamnesis</h3><AnamnesisPanel state={anamnesis} onRetry={() => void loadAnamnesis(generation.current)} /></div></div>
         </section>}
       </>}
-      {creating && <CaseCreator onClose={() => setCreating(false)} onCreated={c => { setCases(previous => [...previous.filter(item => item.id !== c.id), c]); chooseCase(c); setCreating(false); setHint("AI-generated synthetic patient created. Your patient is ready."); }} />}
+      {creating && <CaseCreator onClose={() => setCreating(false)} onCreated={c => { setCases(previous => [...previous.filter(item => item.id !== c.id), c]); chooseCase(c, false); setCreating(false); setHint("AI-generated synthetic patient created. Your patient is ready."); }} />}
       <footer className={styles.footer}><span>Built for better listening.</span><span>hackaTUM 2026 · Avelios VIP</span><p>Synthetic patients for education. Not clinical advice. Learning summaries and reflections stay in this browser.</p></footer>
     </main>
   </>;

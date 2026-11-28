@@ -28,3 +28,12 @@ export function engineOptions(signal: AbortSignal, route?: string): EngineOption
 export function openAIHeaders(): HeadersInit {
   return { Authorization: `Bearer ${requireOpenAIKey()}`, "Content-Type": "application/json" };
 }
+
+/** Provider VAD presets; invalid/empty settings use the fast semantic default. */
+export function getTurnDetection() {
+  const preset = process.env.OPENAI_TURN_DETECTION?.trim();
+  const common = { create_response: true, interrupt_response: true };
+  return preset === "server_400"
+    ? { type: "server_vad", threshold: 0.5, prefix_padding_ms: 200, silence_duration_ms: 400, ...common }
+    : { type: "semantic_vad", eagerness: preset === "semantic_medium" ? "medium" : "high", ...common };
+}
