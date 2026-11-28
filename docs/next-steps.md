@@ -43,7 +43,12 @@ How we answer each (the pitch must say these out loud):
   llm-integration, testing-qa).
 
 ## Running / waiting at checkpoint
-- New-case text eval n=3, 12 turns → `eval/summary.md` + `eval/results/*.json` (log in session scratchpad).
+- New-case text eval DONE (n=3, 12 turns, 24 interviews, 0 failures, `eval/summary.md`): invented 1,
+  contradictions 2, unprompted 7 (all multimorbid-dizziness: stoic 1→3, 2→1; chatty 2→3), jargon 0, role 0,
+  persona 19/24 = 79 % (misses: chest downplaying ×2, headache calm-engineer ×2, chatty ×1), text p50 3.2 s
+  / p95 6.7 s. **Gate not met.** Next: inspect `eval/results/<latest>.json` guard details; tighten
+  multimorbid `reveal_when` (likely bundled medication/fall answers) and sharpen downplaying vs anxious and
+  calm-engineer vs irritable (patient-performance skill); rerun paired n=3.
 - Evidence-grounded cases: Codex researched sources but its drafts were NOT saved (sandbox write denied);
   report + brief in `docs/research/case-grounding.md`. Rerun writing to `docs/research/cases-v3/`, then
   paired eval before replacing `cases/`. Keep Maya's female voices (commit 9e32b2e).
