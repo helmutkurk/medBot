@@ -15,6 +15,11 @@ personality, selective disclosure and proof "beyond one lucky demo run". So our 
    every interview ends as a structured anamnesis the student can compare with the ground truth, the same
    documentation step a clinician performs in a HIS.
 
+## hackaTUM jury criteria (organisers, 2026-11-28)
+Innovation/ambition, UI/UX, overall quality (works start to finish, no bugs on stage, critical feature works,
+good scoping) and presentation quality. Mapping of each criterion to our feature and on-stage proof:
+[next-steps.md](next-steps.md#what-the-jury-scores-all-must-be-visibly-met).
+
 ## Differentiators to build (priority order)
 1. **Structured anamnesis + documentation feedback.** After the interview, the system drafts the anamnesis
    from what was actually disclosed (HPI, past history, medication, allergies, family, social), marks gaps
