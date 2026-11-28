@@ -7,7 +7,7 @@ import type { EngineOptions } from "../case/types.ts";
 import { isRecord } from "../case/validate.ts";
 
 export const DEFAULT_TEXT_MODEL = "gpt-5-mini";
-export const DEFAULT_PATIENT_MODEL = "gpt-4.1-mini";
+export const DEFAULT_PATIENT_MODEL = "gpt-5-mini"; // gpt-4.1-mini: 3x faster but 8 invented facts in 12 interviews (eval 2026-11-28)
 export type OpenAIErrorKind = "http" | "timeout" | "aborted" | "network" | "invalid_response" | "refusal";
 
 export class OpenAIError extends Error {

@@ -3,10 +3,12 @@ import type { PatientCase, Personality } from "./types.ts";
 /** Short performance notes for the speech model, derived from the personality text. */
 export function buildVoiceDelivery(p: Personality): string {
   const text = `${p.label} ${p.style} ${p.emotion}`.toLowerCase();
-  const nervous = /anxious|worr|nervous|tense|hesitan|chatty|talkative/.test(text);
+  const nervous = /anxious|worr|nervous|tense|hesitan/.test(text);
+  const sociable = /chatty|talkative|sociable|warm|friendly/.test(text);
   const flat = /downplay|minimis|clipped|dry|subdued|quiet|reserved|soft|matter-of-fact|guarded/.test(text);
   const lines: string[] = [];
-  if (nervous && !flat) lines.push("Pace: slightly quick and uneven, rising at the end of unsure phrases. Breathe audibly now and then; a short nervous exhale or laugh is fine.", "Pauses and hesitations: stumble briefly on worrying topics (\"um\", \"I mean\", a restarted sentence), then continue.", "Tone: tense, thin and a little high; worry audible, never theatrical.");
+  if (sociable && !nervous && !flat) lines.push("Pace: relaxed and lively, a little faster when telling a story; slow down for the actual answer.", "Pauses and hesitations: few; an easy \"oh\" or \"well\" before an aside, then back to the question.", "Tone: warm, bright and friendly; smile in the voice, never tense.");
+  else if (nervous && !flat) lines.push("Pace: slightly quick and uneven, rising at the end of unsure phrases. Breathe audibly now and then; a short nervous exhale or laugh is fine.", "Pauses and hesitations: stumble briefly on worrying topics (\"um\", \"I mean\", a restarted sentence), then continue.", "Tone: tense, thin and a little high; worry audible, never theatrical.");
   else if (flat && !nervous) lines.push("Pace: slow and even, short sentences, falling intonation. Leave a beat of silence before answering uncomfortable questions.", "Pauses and hesitations: a quiet \"hm\" or small sigh before admitting something; trail off rather than elaborate.", "Tone: low, flat and contained; feeling leaks out only briefly, then is covered up.");
   else lines.push("Pace: natural conversational speed with small pauses.", "Pauses and hesitations: occasional, only where the emotion calls for them.", "Tone: let the emotion below colour the voice without exaggeration.");
   lines.push(`Perform this feeling in the voice: ${p.emotion}`, "Keep answers short; delivery never adds facts or changes what a fact says.");

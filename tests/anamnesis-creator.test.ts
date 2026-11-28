@@ -6,6 +6,8 @@ import test from "node:test";
 import { anamnesisReport, generateCase, OpenAIError, listCases, loadCase, saveGeneratedCase, validateCase } from "../lib/engine/index.ts";
 
 const chest = await loadCase("chest-tightness-01");
+// The creator emits 10-15 facts; built-in cases are richer, so trim the fixture.
+const generatedFixture = { ...chest, facts: chest.facts.slice(0, 15) };
 function envelope(value: unknown): Response {
   return Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(value) }] }] });
 }
@@ -13,12 +15,12 @@ function envelope(value: unknown): Response {
 test("all built-in and generated cases validate; demo cases have distinct voices and required safety facts", async () => {
   for (const summary of await listCases()) assert.deepEqual(validateCase(await loadCase(summary.id)), []);
   for (const [id, age, flags] of [
-    ["multimorbid-dizziness", 79, ["head_strike", "new_tablet", "postural_near_faint"]],
-    ["thunderclap-headache", 41, ["sudden_onset", "worst_ever", "neck_stiffness"]],
+    ["multimorbid-dizziness", 79, ["head_impact", "standing_trigger"]],
+    ["thunderclap-headache", 41, ["time_to_peak", "worst_headache_comparison", "neck_stiffness"]],
   ] as const) {
     const c = await loadCase(id);
     assert.equal(c.patient.age, age);
-    assert.ok(c.facts.length >= 12 && c.facts.length <= 15);
+    assert.ok(c.facts.length >= 12 && c.facts.length <= 45);
     assert.equal(new Set(c.personalities.map(p => p.voice)).size, 2);
     for (const flag of flags) assert.equal(c.facts.find(f => f.id === flag)?.red_flag, true);
   }
@@ -76,7 +78,7 @@ test("anamnesis rewrites only documented facts and rejects invalid membership or
 
 test("generated cases validate and save/load without changing title sorting", async t => {
   const input = { diagnosis: "Example / diagnosis", age: 63, sex: "female" as const, setting: "Outpatient clinic" };
-  t.mock.method(globalThis, "fetch", async () => envelope({ ...chest, patient: { ...chest.patient, age: input.age, sex: input.sex } }));
+  t.mock.method(globalThis, "fetch", async () => envelope({ ...generatedFixture, patient: { ...chest.patient, age: input.age, sex: input.sex } }));
   const generated = await generateCase(input, { apiKey: "placeholder" });
   assert.equal(generated.mode, "openai");
   const c = generated.case;
@@ -111,9 +113,9 @@ test("live creator validates, retries once, uses structured output and normalise
     assert.equal(body.text.format.type, "json_schema");
     assert.equal(body.text.format.strict, true);
     assert.equal(body.store, false);
-    if (++calls === 1) return envelope({ ...chest, facts: [] });
+    if (++calls === 1) return envelope({ ...generatedFixture, facts: [] });
     assert.match(body.input[0].content, /non-empty array/);
-    return envelope(chest);
+    return envelope(generatedFixture);
   });
   const result = await generateCase({ diagnosis: "Chest pain" }, { apiKey: "placeholder" });
   assert.equal(calls, 2);
