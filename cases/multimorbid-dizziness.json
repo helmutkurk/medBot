@@ -127,6 +127,27 @@
       "reveal_when": "asked whether she lost consciousness or blacked out"
     },
     {
+      "id": "no_fall_jerking",
+      "category": "symptom",
+      "truth": "Reports no jerking movements during the fall.",
+      "lay": "I did not have any jerking movements when I fell.",
+      "reveal_when": "Asked about jerking, shaking, convulsions or seizure-like movements during the fall. A question only about blacking out does not permit this. This is the patient's report, not a witnessed examination or proof against a seizure."
+    },
+    {
+      "id": "no_fall_tongue_biting",
+      "category": "symptom",
+      "truth": "Reports no tongue biting during the fall.",
+      "lay": "I did not bite my tongue when I fell.",
+      "reveal_when": "Asked about biting or injuring the tongue during the fall, or about seizure-type features including tongue biting. A question only about blacking out or jerking does not permit this."
+    },
+    {
+      "id": "no_fall_wetting",
+      "category": "symptom",
+      "truth": "Reports no involuntary urine loss during the fall.",
+      "lay": "I did not wet myself when I fell.",
+      "reveal_when": "Asked about wetting, loss of bladder control or incontinence during the fall. A question only about blacking out, jerking or tongue biting does not permit this. Bowel-control history is not authored by this fact."
+    },
+    {
       "id": "doxazosin_regimen",
       "category": "medication",
       "truth": "Doxazosin 1 mg orally nightly for blood pressure.",

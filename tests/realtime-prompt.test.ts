@@ -73,6 +73,17 @@ test("Realtime v2 has one delivery dial, no acted breathing, and preserves the t
   assert.ok(buildPatientInstructions(c, c.personalities[0]!).includes("TEXT: Return JSON"));
 });
 
+test("voice and text forbid generic uncertainty after known facts but retain scoped uncertainty", async () => {
+  const c = await loadCase("chest-tightness-01");
+  for (const instructions of [buildPatientInstructions(c, c.personalities[0]!), buildRealtimeInstructions(c, c.personalities[0]!)]) {
+    assert.ok(instructions.includes("generic unknown_answer"));
+    assert.ok(instructions.includes("even with changed case or punctuation"));
+    assert.ok(instructions.includes("uncertainty specifically about"));
+    assert.ok(instructions.includes(JSON.stringify(c.unknown_answer)));
+  }
+  assert.ok(buildRealtimeInstructions(c, c.personalities[0]!).includes("Never speak tool/meta tokens"));
+});
+
 test("session sends each configured VAD preset, defaulting safely to semantic high", async t => {
   const previousKey = process.env.OPENAI_API_KEY;
   const previous = process.env.OPENAI_TURN_DETECTION;

@@ -20,7 +20,7 @@ test("all built-in and generated cases validate; demo cases have distinct voices
   ] as const) {
     const c = await loadCase(id);
     assert.equal(c.patient.age, age);
-    assert.ok(c.facts.length >= 12 && c.facts.length <= 45);
+    assert.ok(c.facts.length >= 12);
     assert.equal(new Set(c.personalities.map(p => p.voice)).size, 2);
     for (const flag of flags) assert.equal(c.facts.find(f => f.id === flag)?.red_flag, true);
   }

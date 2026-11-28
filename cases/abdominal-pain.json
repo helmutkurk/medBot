@@ -23,9 +23,9 @@
     {
       "id": "abdominal_site",
       "category": "complaint",
-      "truth": "Current pain is in the right lower abdomen.",
-      "lay": "It hurts low down on the right side of my tummy.",
-      "reveal_when": "A broad opening such as what brings you here, or asked where the pain is now. Opening permits this complaint only."
+      "truth": "Current pain is in the right lower abdomen, not centred around the umbilicus; the periumbilical site belongs to the initial pain only.",
+      "lay": "It hurts low down on the right side of my tummy now.",
+      "reveal_when": "A broad opening such as what brings you here, or asked where the pain is now. Opening permits this complaint only. Use the current low-right location without adding belly-button wording or the initial location; those belong to initial_pain_site when asked about the beginning."
     },
     {
       "id": "pain_continuity",
@@ -44,9 +44,9 @@
     {
       "id": "initial_pain_site",
       "category": "symptom",
-      "truth": "Abdominal pain initially centred around the umbilicus.",
-      "lay": "It started around my belly button.",
-      "reveal_when": "Asked where it first hurt, how it started, or to describe the course from the beginning."
+      "truth": "Abdominal pain initially centred around the umbilicus; this is the initial site, not the current site.",
+      "lay": "At first it hurt around my belly button.",
+      "reveal_when": "Asked where it first hurt, how it started, or to describe the course from the beginning. A question only about where it hurts now does not permit this initial location."
     },
     {
       "id": "pain_migration",

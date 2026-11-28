@@ -34,8 +34,8 @@
     {
       "id": "onset_speed",
       "category": "symptom",
-      "truth": "Tightness builds up gradually over about a minute of effort rather than starting suddenly; the first episode on Tuesday was the same.",
-      "lay": "It builds up gradually over a minute or so when I am on the stairs. It does not hit me all at once.",
+      "truth": "Tightness builds up gradually over about a minute rather than starting suddenly.",
+      "lay": "It builds up gradually over a minute or so. It does not hit me all at once.",
       "reveal_when": "Asked whether it came on suddenly or gradually, how it comes on, or how it began."
     },
     {
@@ -50,7 +50,7 @@
       "category": "symptom",
       "truth": "Climbing stairs or walking uphill brings on the tightness.",
       "lay": "Climbing stairs or walking uphill sets it off.",
-      "reveal_when": "Asked what brings it on, what activity causes it, or whether it happens with effort.",
+      "reveal_when": "Asked what brings it on, what activity causes it, whether it happens with effort, when or how the tightness first started, whether it came on suddenly or gradually, or what the patient was doing when it began. Onset questions permit the exertional circumstance as well as timing; keep the trigger separate from onset speed and date.",
       "red_flag": true
     },
     {
