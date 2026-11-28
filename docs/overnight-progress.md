@@ -13,3 +13,4 @@
 | 09:10 | D,F | voice v2 (53eb7ea) and PWA committed; check 113 tests green | 9c7535e |
 | 09:15 | I | voice bench v2, 4 cases × 2 personalities, 48 turns: first audio p50 358–543 ms, invented 0, contradictions 0, unprompted 3; bench aborts on unprobed cases (follow-up: skip them) | — |
 | 11:19 | E2,K | test modes (2f983f6) and hosting prep (501eb60, 2a follow-up) committed; check 129 green | 05d7172 |
+| 11:29 | H,I | pitch/demo/devpost rewritten (Codex); eval tooling parallel; final eval n=5 running | 077c1f8 |
