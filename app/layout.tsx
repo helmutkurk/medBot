@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { MobileNav } from "../components/MobileNav.tsx";
 import { PwaClient } from "../components/PwaClient.tsx";
+import { themeBootScript } from "../components/ThemeToggle.tsx";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -22,5 +23,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}<footer className="demo-footer"><a href="/feedback">Send feedback</a><a href="/privacy">Privacy</a></footer><PwaClient /><MobileNav /></body></html>;
+  return <html lang="en" suppressHydrationWarning><head><script dangerouslySetInnerHTML={{ __html: themeBootScript }} /></head><body>{children}<footer className="demo-footer"><a href="/feedback">Send feedback</a><a href="/privacy">Privacy</a></footer><PwaClient /><MobileNav /></body></html>;
 }

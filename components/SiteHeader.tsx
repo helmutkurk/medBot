@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Logo } from "./Brand.tsx";
 import { GameChip } from "./GameChip.tsx";
+import { ThemeToggle } from "./ThemeToggle.tsx";
 import styles from "./SiteHeader.module.css";
 
 export type NavKey = "interview" | "learning" | "leaderboard" | "evidence";
@@ -19,6 +20,7 @@ export function SiteHeader({ current, children }: { current?: NavKey; children?:
       {links.map(link => <a key={link.key} href={link.href} aria-current={current === link.key ? "page" : undefined}>{link.label}</a>)}
     </nav>
     <GameChip />
+    <ThemeToggle />
     {children}
   </div></header>;
 }

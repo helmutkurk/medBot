@@ -29,14 +29,22 @@
   /* Type scale */
   --t-xs: 12px; --t-sm: 13px; --t-base: 15px; --t-md: 17px; --t-lg: 22px; --t-xl: 34px;
 }
+/* Theme: follows the system unless the user picks one (html[data-theme], set by components/ThemeToggle.tsx). */
+:root[data-theme="light"] { color-scheme: light; }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #0f1112; --surface: #1a1d1f; --surface-2: #121516; --text: #f4f4f6; --muted: #a6a9b0; --border: #33383b;
     --accent: #5ccbbe; --accent-ink: #0b1f1d; --accent-soft: #17353a; --warn: #f0b95a; --warn-soft: #382b12;
     --danger: #ff8a80; --danger-soft: #3b1d1b;
     --found: #74d69f; --found-soft: #15301f; --info: #8db8ff; --info-soft: #172742; --header: #0f1112d9; --shadow: 0 4px 24px #0004;
   }
 }
+:root[data-theme="dark"] { color-scheme: dark;
+    --background: #0f1112; --surface: #1a1d1f; --surface-2: #121516; --text: #f4f4f6; --muted: #a6a9b0; --border: #33383b;
+    --accent: #5ccbbe; --accent-ink: #0b1f1d; --accent-soft: #17353a; --warn: #f0b95a; --warn-soft: #382b12;
+    --danger: #ff8a80; --danger-soft: #3b1d1b;
+    --found: #74d69f; --found-soft: #15301f; --info: #8db8ff; --info-soft: #172742; --header: #0f1112d9; --shadow: 0 4px 24px #0004;
+  }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--background); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif; font-size: var(--t-base); line-height: 1.5; -webkit-font-smoothing: antialiased; }
