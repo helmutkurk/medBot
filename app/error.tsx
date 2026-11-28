@@ -1,5 +1,9 @@
 "use client";
 
-export default function ErrorPage({ reset }: { reset: () => void }) {
-  return <main className="error-page"><h1>We couldn’t load the patient cases.</h1><p>Check that the case files are valid, then try again.</p><button onClick={reset}>Try again</button></main>;
+export default function ErrorPage({ reset }: { error?: Error; reset: () => void }) {
+  return <main className="error-page">
+    <h1>Something went wrong.</h1>
+    <p>The page could not load. This is usually temporary: try again, or go back to the start.</p>
+    <p><button onClick={reset}>Try again</button> <a href="/">Back to home</a></p>
+  </main>;
 }

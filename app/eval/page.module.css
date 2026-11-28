@@ -30,3 +30,12 @@
 .tableScroll tbody th span { display: block; color: var(--muted); font-weight: 400; }
 .muted { overflow-wrap: anywhere; }
 @media (max-width: 600px) { .header nav { padding: var(--s3); } .main { padding: var(--s5) var(--s3); } .card { padding: var(--s3); } .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tile { padding: var(--s3); } .tile strong { font-size: 26px; } }
+.headline { color: var(--text) !important; font-size: var(--t-lg) !important; line-height: 1.4; max-width: 60ch; }
+.tileLabel { color: var(--text) !important; font-weight: 600; }
+.meaning { font-size: var(--t-xs) !important; line-height: 1.4; }
+.big { font-size: var(--t-xl); font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.steps { margin: var(--s3) 0 0; padding-left: var(--s5); display: flex; flex-direction: column; gap: var(--s2); font-size: var(--t-sm); }
+.voiceRow { display: flex; flex-wrap: wrap; gap: var(--s5); margin-top: var(--s3); }
+.voiceStat { display: flex; flex-direction: column; gap: var(--s1); max-width: 260px; }
+.voiceStat strong { font-size: var(--t-xl); font-weight: 600; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.voiceStat span { color: var(--muted); font-size: var(--t-sm); }
