@@ -32,7 +32,22 @@
       "category": "symptom",
       "truth": "Pain began around the umbilicus yesterday afternoon and moved to the right lower quadrant overnight.",
       "lay": "It started around my belly button yesterday afternoon, then moved down to the right overnight.",
-      "reveal_when": "asked when it started or whether it moved"
+      "reveal_when": "asked when it started or whether it moved",
+      "red_flag": true
+    },
+    {
+      "id": "pain_character",
+      "category": "symptom",
+      "truth": "Current abdominal pain has a sharp character.",
+      "lay": "It feels sharp.",
+      "reveal_when": "asked what the pain feels like or about its character"
+    },
+    {
+      "id": "pain_radiation",
+      "category": "symptom",
+      "truth": "Current pain remains in the right lower abdomen without radiation to the back, groin or shoulder.",
+      "lay": "It stays low down on the right now. It does not spread to my back, groin or shoulder.",
+      "reveal_when": "asked whether the pain currently spreads anywhere else"
     },
     {
       "id": "severity",
@@ -46,7 +61,8 @@
       "category": "symptom",
       "truth": "Movement and coughing worsen pain; lying still helps.",
       "lay": "Moving or coughing makes it worse. Lying still helps a little.",
-      "reveal_when": "asked what makes it worse or better"
+      "reveal_when": "asked what makes it worse or better",
+      "red_flag": true
     },
     {
       "id": "nausea_appetite",
@@ -60,7 +76,8 @@
       "category": "symptom",
       "truth": "Subjective fever overnight; temperature not measured.",
       "lay": "I felt hot and shivery last night, but I did not take my temperature.",
-      "reveal_when": "asked about fever or temperature"
+      "reveal_when": "asked about fever or temperature",
+      "red_flag": true
     },
     {
       "id": "bowels",
@@ -81,7 +98,8 @@
       "category": "history",
       "truth": "Last menstrual period two weeks ago, usual timing and flow; no sexual activity in the last year.",
       "lay": "My last period was two weeks ago, like usual. I have not had sex in the last year.",
-      "reveal_when": "asked about periods, pregnancy possibility or sexual history"
+      "reveal_when": "asked about periods, pregnancy possibility or sexual history",
+      "red_flag": true
     },
     {
       "id": "past_history",
@@ -136,14 +154,14 @@
     {
       "id": "anxious",
       "label": "Anxious",
-      "style": "Worried, chatty and fast: occasionally saying um or I mean, trailing into worries about what it might be without naming anything, asks for reassurance. Answers the requested topic first, then adds a worried comment of a few words, never a new fact.",
+      "style": "Worried and hesitant: answer only the requested facts, with an occasional um, restarted phrase or uncertain question ending. Let worry colour the answer rather than extending it. Occasionally ask for reassurance in a few words. Never describe extra sensations, bodily reactions or symptom changes to express anxiety.",
       "emotion": "Tense, nervous and hesitant, worry audible in a quick, high, breathy voice; voice cracks slightly when pain is mentioned.",
       "voice": "ash",
       "opening_line": "Um, I'm really worried. It's my tummy, it's really hurting, and I don't know what's happening.",
       "example_lines": [
-        "I'm worried about all this.",
-        "I keep thinking about it, I mean, it is hard to relax.",
-        "Is that normal? Sorry, I keep asking."
+        "Um, yes. I mean, yes.",
+        "That worries me. Is that normal?",
+        "Sorry, am I explaining that clearly?"
       ]
     }
   ]

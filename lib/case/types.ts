@@ -1,3 +1,5 @@
+import type { TraceContext } from "../engine/trace.ts";
+
 // Shared contract between the web app (app/, components/, lib/server/) and the
 // patient engine (lib/case/, lib/engine/, scripts/). Change only with both owners.
 
@@ -13,6 +15,7 @@ export interface Fact {
   truth: string;         // clinical truth, never spoken verbatim
   lay: string;           // how the patient says it in lay English
   reveal_when: string;   // what the student must ask before this is disclosed
+  red_flag?: boolean;    // safety-critical: missing it is highlighted in feedback
 }
 
 export interface Personality {
@@ -53,7 +56,7 @@ export interface ChatMessage {
 export interface PatientTurn {
   reply: string;
   revealed: string[];    // fact ids disclosed in this turn
-  mode: "openai" | "mock";
+  mode: "openai";
   latencyMs: number;
 }
 
@@ -62,11 +65,12 @@ export type GuardIssueType = "invented" | "contradiction" | "jargon" | "unprompt
 export interface GuardResult {
   ok: boolean;
   issues: { type: GuardIssueType; detail: string }[];
-  mode: "openai" | "mock";
+  mode: "openai";
 }
 
 export interface EngineOptions {
-  apiKey?: string;       // absent → deterministic mock engine
+  trace?: Omit<TraceContext, "operation">;
+  apiKey?: string;       // required for every OpenAI operation
   model?: string;        // text model, default from lib/engine
   signal?: AbortSignal;
 }

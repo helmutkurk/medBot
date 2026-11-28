@@ -10,6 +10,6 @@ export function POST(request: Request) {
     const messages = history(data.history);
     const text = string(data.text, "text");
     const { c, p } = await interviewFrom(data);
-    return json(await patientTurn(c, p, messages, text, engineOptions(requestSignal(request))));
+    return json(await patientTurn(c, p, messages, text, engineOptions(requestSignal(request), "/api/chat")));
   });
 }

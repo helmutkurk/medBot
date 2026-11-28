@@ -1,5 +1,5 @@
 import type { ChatMessage } from "../case/types.ts";
-import { CaseNotFoundError, getPersonality, loadCase } from "../engine/index.ts";
+import { CaseNotFoundError, getPersonality, loadCase, MissingApiKeyError, OpenAIError } from "../engine/index.ts";
 
 export class HttpError extends Error {
   readonly status: number;
@@ -19,6 +19,12 @@ export async function route(action: () => Promise<Response>): Promise<Response> 
   try {
     return await action();
   } catch (error) {
+    if (error instanceof MissingApiKeyError) return json({ error: { code: "no_api_key", message: error.message } }, 503);
+    if (error instanceof OpenAIError) {
+      if (error.kind === "timeout") return json({ error: { code: "timeout", message: "OpenAI timed out. Please try again." } }, 504);
+      if (error.kind === "aborted") return json({ error: { code: "cancelled", message: "The request was cancelled." } }, 499);
+      return json({ error: { code: "upstream_error", message: "OpenAI could not complete the request. Check API access and quota, then try again." } }, 502);
+    }
     if (error instanceof CaseNotFoundError) return json({ error: { code: "case_not_found", message: "The requested patient case was not found." } }, 404);
     if (error instanceof HttpError) return json({ error: { code: error.code, message: error.message } }, error.status);
     if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
@@ -34,7 +40,7 @@ export function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-export async function body(request: Request): Promise<Record<string, unknown>> {
+export async function body(request: Request, maxBytes = 128_000): Promise<Record<string, unknown>> {
   const origin = request.headers.get("origin");
   if (origin && origin !== new URL(request.url).origin) throw new HttpError(403, "invalid_origin", "Requests must come from this application.");
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) throw new HttpError(415, "invalid_content_type", "Use application/json.");
@@ -47,9 +53,9 @@ export async function body(request: Request): Promise<Record<string, unknown>> {
       const { value, done } = await reader.read();
       if (done) break;
       length += value.length;
-      if (length > 128_000) {
+      if (length > maxBytes) {
         await reader.cancel();
-        throw new HttpError(413, "body_too_large", "The interview history is too large. Start a new interview.");
+        throw new HttpError(413, "body_too_large", "The request body is too large.");
       }
       chunks.push(value);
     }

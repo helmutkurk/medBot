@@ -12,11 +12,23 @@ export class CaseNotFoundError extends Error {
   }
 }
 
-async function readCases(): Promise<PatientCase[]> {
-  const directory = path.join(process.cwd(), "cases");
-  const files = (await readdir(directory)).filter(file => file.endsWith(".json")).sort();
+async function readCases(directory?: string): Promise<PatientCase[]> {
+  // Keep production tracing scoped to cases; arbitrary directory overrides serve Node tests.
+  const filesIn = (subdir: string) => directory === undefined
+    ? readdir(path.join(process.cwd(), "cases", subdir))
+    : readdir(/* turbopackIgnore: true */ path.join(/* turbopackIgnore: true */ directory, subdir));
+  let generated: string[];
+  try { generated = (await filesIn("generated")).filter(file => file.endsWith(".json")).map(file => path.join("generated", file)); }
+  catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    generated = [];
+  }
+  const files = [...(await filesIn("")).filter(file => file.endsWith(".json")), ...generated].sort();
   const cases = await Promise.all(files.map(async file => {
-    const value: unknown = JSON.parse(await readFile(path.join(directory, file), "utf8"));
+    const contents = directory === undefined
+      ? await readFile(path.join(process.cwd(), "cases", file), "utf8")
+      : await readFile(/* turbopackIgnore: true */ path.join(/* turbopackIgnore: true */ directory, file), "utf8");
+    const value: unknown = JSON.parse(contents);
     try { assertCase(value); } catch (error) { throw new Error(`Cannot load ${file}`, { cause: error }); }
     return value;
   }));
@@ -28,15 +40,15 @@ async function readCases(): Promise<PatientCase[]> {
   return cases;
 }
 
-export async function listCases(): Promise<CaseSummary[]> {
-  return (await readCases()).sort((a, b) => a.title < b.title ? -1 : a.title > b.title ? 1 : 0).map(c => ({
+export async function listCases(directory?: string): Promise<CaseSummary[]> {
+  return (await readCases(directory)).sort((a, b) => a.title < b.title ? -1 : a.title > b.title ? 1 : 0).map(c => ({
     id: c.id, title: c.title, patient: c.patient, factCount: c.facts.length,
     personalities: c.personalities.map(({ id, label, voice }) => ({ id, label, voice })),
   }));
 }
 
-export async function loadCase(id: string): Promise<PatientCase> {
-  const c = (await readCases()).find(c => c.id === id);
+export async function loadCase(id: string, directory?: string): Promise<PatientCase> {
+  const c = (await readCases(directory)).find(c => c.id === id);
   if (!c) throw new CaseNotFoundError(id);
   return c;
 }

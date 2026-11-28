@@ -29,7 +29,7 @@ export function CoachPanel({ state, onRetry, hasMessages }: { state: CoachState;
     <div className={styles.top}>
       <ScoreRing score={report.score} />
       <div className={styles.coverage}>
-        <h3>Coverage by topic{report.mode === "mock" && <span className={styles.mock}>Mock coach</span>}</h3>
+        <h3>Coverage by topic</h3>
         <ul>{report.coverage.map(row => <li key={row.category}>
           <span className={styles.cat}>{row.category}</span>
           <progress value={row.found} max={Math.max(1, row.total)} aria-label={`${row.category}: ${row.found} of ${row.total}`} />

@@ -92,6 +92,29 @@ test("live guard merges deterministic jargon even when the judge misses it", asy
     const guard = await guardTurn(c, [{ role: "student", text: "How are you?" }], "I have angina.", opts);
     assert.equal(guard.ok, false);
     assert.equal(guard.mode, "openai");
-    assert.ok(guard.issues.some(i => i.type === "jargon"));
+    assert.deepEqual(guard.issues, [{ type: "jargon", detail: "Patient used medical jargon: angina." }]);
+  } finally { globalThis.fetch = original; }
+});
+
+test("guard deduplicates jargon by term and meaning while preserving distinct terms and issue types", async () => {
+  const c = await loadCase("chest-tightness-01");
+  const original = globalThis.fetch;
+  const modelIssues = [
+    { type: "jargon", detail: "The word 'ANGINA' is clinical terminology." },
+    { type: "jargon", detail: "Patient said angina instead of chest tightness." },
+    { type: "jargon", detail: "The phrase 'myocardial infarction' names a diagnosis." },
+    { type: "jargon", detail: "Dyspnea is not everyday speech." },
+    { type: "invented", detail: "Angina is not a diagnosis known to the patient." },
+    { type: "invented", detail: "  ANGINA is not a diagnosis known to the patient.  " },
+    { type: "unprompted", detail: "Angina is not a diagnosis known to the patient." },
+  ];
+  globalThis.fetch = async () => envelope({ ok: false, issues: modelIssues, mode: "openai" });
+  try {
+    const guard = await guardTurn(c, [{ role: "student", text: "How are you?" }], "Angina, myocardial infarction, dyspnoea and hypertension.", opts);
+    assert.equal(guard.ok, false);
+    assert.deepEqual(guard.issues, [
+      modelIssues[0], modelIssues[2], modelIssues[3], modelIssues[4], modelIssues[6],
+      { type: "jargon", detail: "Patient used medical jargon: hypertension." },
+    ]);
   } finally { globalThis.fetch = original; }
 });

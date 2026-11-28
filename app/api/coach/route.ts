@@ -10,6 +10,6 @@ export function POST(request: Request) {
     const messages = history(data.history);
     const revealed = ids(data.revealed, "revealed");
     const c = await caseFrom(data.caseId);
-    return json(await coachReport(c, messages, revealed, engineOptions(requestSignal(request))));
+    return json(await coachReport(c, messages, revealed, engineOptions(requestSignal(request), "/api/coach")));
   });
 }

@@ -11,3 +11,6 @@ recordings/
 eval/results/
 *.tsbuildinfo
 .board/
+cases/generated/
+traces/
+local-only/

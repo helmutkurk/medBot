@@ -4,9 +4,8 @@
 .wordmark { display: flex; align-items: center; gap: var(--s2); font-size: 22px; font-weight: 650; letter-spacing: -.04em; text-decoration: none; border-radius: var(--r-sm); }
 .logo { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-size: 22px; line-height: 1; }
 .badge { display: flex; align-items: center; gap: var(--s2); font-size: var(--t-xs); font-weight: 550; padding: var(--s1) var(--s2) var(--s1) 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; min-height: 32px; }
-.badgeMock { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-.badge:not(.badgeMock) .dot { background: var(--accent); }
+.badge .dot { background: var(--accent); }
 .main { max-width: 1160px; padding: 0 var(--s5); margin: auto; }
 .intro { padding: var(--s6) 0 var(--s5); }
 .eyebrow { font-size: var(--t-xs); letter-spacing: .12em; text-transform: uppercase; font-weight: 650; color: var(--accent); }
@@ -106,7 +105,6 @@
 .disclosed .check { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
 .facts { max-height: 648px; overflow-y: auto; scrollbar-width: thin; }
 .guard .subtle { margin-bottom: 0; }
-.mockNote { font-size: var(--t-xs); margin-top: var(--s2); color: var(--warn); }
 .warningList { list-style: none; margin: var(--s3) 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; max-height: 240px; overflow-y: auto; }
 .warningList li { display: flex; flex-direction: column; gap: 2px; font-size: var(--t-sm); padding-left: 12px; border-left: 2px solid var(--warn); }
 .warningList strong { text-transform: capitalize; font-weight: 550; }
@@ -149,3 +147,20 @@
   .caseCard:not(:disabled):hover { transform: none; }
   .speaking::after { animation: none; }
 }
+
+.headerNav { display: flex; align-items: center; justify-content: flex-end; gap: var(--s3); flex-wrap: wrap; }
+.evidenceLink { font-size: var(--t-sm); font-weight: 550; text-decoration: none; color: var(--accent); padding: var(--s2); border-radius: var(--r-sm); }
+.caseInfo .redFlagBadge { align-self: flex-start; margin-top: var(--s2); font-size: 11px; padding: 2px var(--s2); border-radius: var(--r-sm); background: var(--danger-soft); color: var(--danger); }
+.caseInfo { overflow-wrap: anywhere; }
+.newPatient { border-style: dashed; box-shadow: none; background: var(--surface-2); }
+.summaryPanels { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s4); margin-top: var(--s4); }
+.summaryPanels > div { min-width: 0; }
+@media (max-width: 900px) { .summaryPanels { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) { .headerNav { gap: var(--s1); } .headerNav .badge { max-width: 180px; } .caseGrid { grid-template-columns: minmax(0, 1fr); } }
+
+.setupCard { width: 100%; margin: var(--s6) 0; }
+.setupCard h1 { font-size: var(--t-xl); letter-spacing: -.04em; margin: var(--s2) 0 var(--s3); }
+.setupCard p { color: var(--muted); }
+.setupCard ol { margin: var(--s4) 0 0; padding-left: var(--s4); }
+.setupCard li + li { margin-top: var(--s3); }
+.setupCard pre { overflow-x: auto; background: var(--surface-2); padding: var(--s3); border-radius: var(--r-sm); }

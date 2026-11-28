@@ -14,14 +14,16 @@
       "truth": "Exertional chest tightness since Tuesday, on stairs at the depot",
       "lay": "A tightness in my chest. Mostly on the stairs at the depot.",
       "reveal_when": "asked about the complaint or what 'nothing' means",
-      "category": "complaint"
+      "category": "complaint",
+      "red_flag": true
     },
     {
       "id": "radiation_left_arm",
       "truth": "Pain sometimes radiates to the left arm",
       "lay": "Sometimes into my left arm. I blame the steering wheel.",
       "reveal_when": "asked whether it spreads anywhere",
-      "category": "symptom"
+      "category": "symptom",
+      "red_flag": true
     },
     {
       "id": "smoking",
@@ -56,7 +58,8 @@
       "category": "symptom",
       "truth": "Climbing stairs or walking uphill brings on the tightness.",
       "lay": "Climbing stairs or walking uphill sets it off.",
-      "reveal_when": "asked what triggers it or makes it worse"
+      "reveal_when": "asked what triggers it or makes it worse",
+      "red_flag": true
     },
     {
       "id": "rest_relief",
@@ -70,7 +73,8 @@
       "category": "symptom",
       "truth": "Sweating and breathlessness accompany episodes.",
       "lay": "I get a bit sweaty and out of breath when it happens.",
-      "reveal_when": "asked about sweating or breathlessness during an episode"
+      "reveal_when": "asked about sweating or breathlessness during an episode",
+      "red_flag": true
     },
     {
       "id": "severity",

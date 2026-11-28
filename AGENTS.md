@@ -1,13 +1,27 @@
 # Agent rules (Claude Code, Codex)
 
-- Project: medBot, see README.md. Code, docs and commits in English.
-- Work on a branch `name/topic` and open a pull request to `main`; never force-push or rewrite shared history.
-- Stage named paths only (no `git add -A` / `git add .`).
-- Never read, print or commit real environment files or keys; only the example file with placeholders.
-- Ask before adding a dependency; never hand-edit lockfiles.
-- Patient cases are synthetic; no real patient data.
+Goal: win the Avelios "VIP – Virtual Interview Patient" challenge at hackaTUM 2026. Read README.md,
+docs/winning-plan.md (story, demo), docs/next-steps.md (current to-do) and docs/roadmap.md (deadlines).
+
+## Working
+- Code, docs and commits in English. TypeScript strict; Node 26 runs `lib/`, `scripts/`, `tests/` directly:
+  relative imports with `.ts`, erasable TypeScript only.
+- `lib/case/types.ts` is the shared contract between web (`app/`, `components/`, `lib/server/`) and engine
+  (`lib/case/`, `lib/engine/`, `cases/`, `scripts/`); announce changes to it.
+- OpenAI only, no mock mode in the product. Tests stay offline by stubbing `fetch` with real response shapes.
+- Before done: `npm run check`. Prompt or case changes also need an eval run (`npm run eval -- --n 3`) with
+  before/after numbers in the PR; never merge a change that adds invented facts or lowers coverage.
+- Every OpenAI call is traced (`traces/llm.jsonl`, metadata only); watch `/usage` against the capped key.
+
+## Git
+- Branch `name/topic` (lead: `feat/Helmut`), pull request to `main`; main is always demoable.
+  Never force-push or rewrite shared history. Stage named paths only (no `git add -A` / `git add .`).
 - Commits are authored by the human you work for; no agent attribution lines.
-- Measure latency end to end from the first prototype.
+
+## Safety
+- Never read, print or commit real environment files or keys; only `.env.example`. `local-only/` stays private.
+- Ask before adding a dependency; exact versions; never hand-edit lockfiles.
+- Patient cases are synthetic; no real patient data and no personal data about real people (judges included).
 
 <!-- BEGIN:nextjs-agent-rules -->
 

@@ -1,0 +1,32 @@
+.header { border-bottom: 1px solid var(--border); background: var(--surface); }
+.header nav { max-width: 1160px; margin: auto; padding: var(--s3) var(--s5); display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.header a { color: var(--accent); font-size: var(--t-sm); text-decoration: none; min-height: 40px; display: inline-flex; align-items: center; }
+.header .wordmark { color: var(--text); font-size: var(--t-lg); font-weight: 650; letter-spacing: -.04em; }
+.main { max-width: 1160px; margin: auto; padding: var(--s6) var(--s5); display: flex; flex-direction: column; gap: var(--s4); }
+.intro { margin-bottom: var(--s2); }
+.eyebrow { color: var(--accent); font-size: var(--t-xs); text-transform: uppercase; letter-spacing: .12em; font-weight: 650; }
+.intro h1 { font-size: clamp(32px, 5vw, 48px); letter-spacing: -.04em; margin: var(--s2) 0; line-height: 1.1; }
+.intro p { color: var(--muted); font-size: var(--t-md); }
+.card, .tile { border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--s4); background: var(--surface); box-shadow: var(--shadow); min-width: 0; }
+.card h2 { font-size: var(--t-md); }
+.card > p { margin-top: var(--s3); }
+.card pre { overflow: auto; padding: var(--s3); border-radius: var(--r-sm); background: var(--surface-2); }
+.runHeading { display: flex; align-items: center; gap: var(--s3); justify-content: space-between; }
+.mode { background: var(--surface-2); border: 1px solid var(--border); padding: var(--s1) 12px; border-radius: 999px; font-size: var(--t-xs); }
+.warning { background: var(--warn-soft); color: var(--warn); padding: var(--s3); border-radius: var(--r-md); font-size: var(--t-sm); }
+.metadata { display: flex; flex-wrap: wrap; gap: var(--s4); margin: var(--s4) 0 0; }
+.metadata dt, .muted, .footnote { color: var(--muted); font-size: var(--t-sm); }
+.metadata dd { margin: var(--s1) 0 0; font-variant-numeric: tabular-nums; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: var(--s3); }
+.tile { display: flex; flex-direction: column; gap: var(--s2); }
+.tile strong { font-size: var(--t-xl); letter-spacing: -.04em; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile span { color: var(--muted); font-size: var(--t-sm); }
+.tableScroll { max-width: 100%; overflow-x: auto; margin-top: var(--s4); border-radius: var(--r-sm); }
+.tableScroll table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); text-align: left; }
+.tableScroll th, .tableScroll td { padding: 12px var(--s3); border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.tableScroll thead { background: var(--surface-2); }
+.tableScroll th { font-weight: 550; }
+.tableScroll td { white-space: nowrap; }
+.tableScroll tbody th span { display: block; color: var(--muted); font-weight: 400; }
+.muted { overflow-wrap: anywhere; }
+@media (max-width: 600px) { .header nav { padding: var(--s3); } .main { padding: var(--s5) var(--s3); } .card { padding: var(--s3); } .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tile { padding: var(--s3); } .tile strong { font-size: 26px; } }

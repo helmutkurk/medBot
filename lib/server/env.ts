@@ -1,5 +1,5 @@
 import type { EngineOptions } from "../case/types.ts";
-import { DEFAULT_TEXT_MODEL } from "../engine/index.ts";
+import { DEFAULT_TEXT_MODEL, MissingApiKeyError } from "../engine/index.ts";
 
 // This module is imported only by server components and API routes.
 export function hasOpenAIKey(): boolean {
@@ -14,10 +14,16 @@ export function getModels() {
   };
 }
 
-export function engineOptions(signal: AbortSignal): EngineOptions {
-  return { apiKey: process.env.OPENAI_API_KEY?.trim() || undefined, model: getModels().text, signal };
+export function requireOpenAIKey(): string {
+  const key = process.env.OPENAI_API_KEY?.trim();
+  if (!key) throw new MissingApiKeyError();
+  return key;
+}
+
+export function engineOptions(signal: AbortSignal, route?: string): EngineOptions {
+  return { apiKey: requireOpenAIKey(), model: getModels().text, signal, trace: { route } };
 }
 
 export function openAIHeaders(): HeadersInit {
-  return { Authorization: `Bearer ${process.env.OPENAI_API_KEY?.trim() || ""}`, "Content-Type": "application/json" };
+  return { Authorization: `Bearer ${requireOpenAIKey()}`, "Content-Type": "application/json" };
 }

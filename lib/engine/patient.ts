@@ -1,14 +1,13 @@
 import type { ChatMessage, EngineOptions, PatientCase, PatientTurn, Personality } from "../case/types.ts";
 import { buildPatientInstructions } from "../case/prompt.ts";
 import { isRecord } from "../case/validate.ts";
-import { mockPatientTurn } from "./mock.ts";
-import { OpenAIError, requestStructured } from "./openai.ts";
+import { OpenAIError, requestStructured, requireApiKey } from "./openai.ts";
 
 export async function patientTurn(c: PatientCase, p: Personality, history: ChatMessage[], studentText: string, opts: EngineOptions): Promise<PatientTurn> {
   const start = performance.now();
-  opts.signal?.throwIfAborted();
-  if (!opts.apiKey) return { ...mockPatientTurn(c, p, history, studentText), latencyMs: performance.now() - start };
+  requireApiKey(opts);
   const result = await requestStructured({
+    trace: { operation: "patient", caseId: c.id, personalityId: p.id },
     instructions: buildPatientInstructions(c, p), name: "patient_turn",
     input: [...history.map(m => ({ role: m.role === "student" ? "user" as const : "assistant" as const, content: m.text })), { role: "user", content: studentText }],
     schema: { type: "object", properties: {

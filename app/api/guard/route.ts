@@ -10,6 +10,6 @@ export function POST(request: Request) {
     const messages = history(data.history);
     const reply = string(data.reply, "reply");
     const c = await caseFrom(data.caseId);
-    return json(await guardTurn(c, messages, reply, engineOptions(requestSignal(request))));
+    return json(await guardTurn(c, messages, reply, engineOptions(requestSignal(request), "/api/guard")));
   });
 }

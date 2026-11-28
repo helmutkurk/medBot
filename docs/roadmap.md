@@ -5,12 +5,12 @@ submission candidate Sun 08:00, submission Sun 10:00. Each step names its accept
 Status is updated after every block; the evaluation report decides what we fix next.
 
 ## Phase 0 – Foundation (Fri night, done by agents)
-- Next.js app, Realtime voice over WebRTC with ephemeral key, text fallback, mock mode.
+- Next.js app, Realtime voice over WebRTC with ephemeral key, OpenAI text mode.
 - Patient engine: case schema, prompt, `reveal_fact` disclosure, consistency guard, 2 cases x 2 personalities.
 - Eval harness and offline tests. `npm run check` green.
 
 ## Phase 1 – Go live (Sat 00:00–04:00) · goal: one real voice conversation
-1. Add `OPENAI_API_KEY` to the local env file (capped key from Avelios Discord). *Check:* `/api/health` shows `voice: true`.
+1. Add `OPENAI_API_KEY` to the local env file (capped key from Avelios Discord). *Check:* `/api/health` shows `ready: true`.
 2. First real voice interview with a headset, both cases. *Check:* patient answers in character, facts panel fills.
 3. Measure latency (median shown in UI). *Target:* < 1.2 s speech end → first audio. If slower: shorter
    instructions, `semantic_vad` eagerness, smaller transcription model.
@@ -42,7 +42,7 @@ Feature freeze Sat 18:00: after that only fixes, eval evidence and pitch.
 
 ## Working rules
 - One branch per person/agent, PR to `main`, main always demoable; evaluate before merging prompt changes.
-- Keys only in the local env file; costs: eval with small n first, mock for UI work.
+- Keys only in the local env file; costs: eval with small n first, offline fetch stubs for tests.
 - Cut scope with the lead if a milestone slips; never demo a broken path.
 
 ## Open questions

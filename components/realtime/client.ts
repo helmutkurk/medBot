@@ -1,3 +1,5 @@
+import { isRecord } from "../../lib/case/validate.ts";
+
 export type VoiceStatus = "Connecting" | "Listening" | "Patient speaking" | "Thinking";
 
 interface VoiceCallbacks {
@@ -20,6 +22,11 @@ export class RealtimeInterview {
   private outAnalyser: AnalyserNode | null = null;
   private closed = false;
   private abort = new AbortController();
+  private caseId = "";
+  private personalityId = "";
+  private responseStarted = new Map<string, number>();
+  private tracedResponses = new Set<string>();
+  private traceWarningShown = false;
   private turnStarted: number | null = null;
   private outputPlaying = false;
   private continueAfterTools = false;
@@ -36,6 +43,8 @@ export class RealtimeInterview {
   }
 
   async start(caseId: string, personalityId: string): Promise<void> {
+    this.caseId = caseId;
+    this.personalityId = personalityId;
     this.callbacks.onStatus("Connecting");
     try {
       if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw new Error("Voice needs a supported browser on HTTPS or localhost. You can still type below.");
@@ -137,7 +146,10 @@ export class RealtimeInterview {
         this.callbacks.onStatus("Thinking");
         break;
       case "input_audio_buffer.committed":
-        if (typeof event.item_id === "string") this.callbacks.onMessage("student", "", event.item_id);
+        if (typeof event.item_id === "string") {
+          this.callbacks.onMessage("student", "", event.item_id);
+          this.responseStarted.set(`transcription-${event.item_id}`, performance.now());
+        }
         break;
       case "output_audio_buffer.started":
       case "response.output_audio.delta":
@@ -155,9 +167,11 @@ export class RealtimeInterview {
         this.callbacks.onStatus("Listening");
         break;
       case "conversation.item.input_audio_transcription.completed":
+        this.traceResponse({ id: `transcription-${event.item_id}`, status: "completed", usage: event.usage }, "transcription");
         this.message("student", event.transcript, event.item_id);
         break;
       case "conversation.item.input_audio_transcription.failed":
+        this.traceResponse({ id: `transcription-${event.item_id}`, status: "failed" }, "transcription");
         this.callbacks.onError("A spoken question could not be transcribed. The patient can still hear you; the transcript and guard may be incomplete.");
         break;
       case "response.output_audio_transcript.done":
@@ -179,8 +193,13 @@ export class RealtimeInterview {
         this.continueAfterTools = true;
         break;
       }
+      case "response.created": {
+        if (isRecord(event.response) && typeof event.response.id === "string") this.responseStarted.set(event.response.id, performance.now());
+        break;
+      }
       case "response.done": {
-        const response = event.response as { status?: string } | undefined;
+        const response = isRecord(event.response) ? event.response : undefined;
+        if (response) this.traceResponse(response);
         if (response?.status === "failed") this.callbacks.onError("The patient could not finish this response. Please try your question again.");
         if (this.continueAfterTools) {
           this.continueAfterTools = false;
@@ -195,6 +214,36 @@ export class RealtimeInterview {
         if (!this.outputPlaying) this.callbacks.onStatus("Listening");
         break;
     }
+  }
+
+  private traceResponse(response: Record<string, unknown>, kind: "response" | "transcription" = "response"): void {
+    const id = response.id;
+    if (typeof id !== "string" || this.tracedResponses.has(id)) return;
+    this.tracedResponses.add(id);
+    const started = this.responseStarted.get(id);
+    this.responseStarted.delete(id);
+    const usage = isRecord(response.usage) ? response.usage : {};
+    const input = isRecord(usage.input_token_details) ? usage.input_token_details : {};
+    const output = isRecord(usage.output_token_details) ? usage.output_token_details : {};
+    const cached = isRecord(input.cached_tokens_details) ? input.cached_tokens_details : {};
+    const tokens = (value: unknown): number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+    const payload = {
+      operation: "realtime", kind, usageMissing: !isRecord(response.usage), status: response.status === "completed" ? "ok" : "error",
+      caseId: this.caseId, personalityId: this.personalityId,
+      latencyMs: started === undefined ? 0 : performance.now() - started,
+      inputTokens: tokens(usage.input_tokens), outputTokens: tokens(usage.output_tokens),
+      cachedTokens: tokens(input.cached_tokens), audioInputTokens: tokens(input.audio_tokens),
+      audioOutputTokens: tokens(output.audio_tokens), cachedAudioTokens: tokens(cached.audio_tokens),
+    };
+    // Keep the final usage request alive when the interview is closed or the page changes.
+    void fetch("/api/trace", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), keepalive: true })
+      .then(result => { if (!result.ok) throw new Error("Trace failed"); })
+      .catch(() => {
+        if (!this.traceWarningShown) {
+          this.traceWarningShown = true;
+          this.callbacks.onError("Voice usage could not be saved. Budget totals may be incomplete.");
+        }
+      });
   }
 
   private message(role: "student" | "patient", text: unknown, itemId: unknown): void {

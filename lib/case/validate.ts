@@ -40,6 +40,7 @@ export function validateCase(value: unknown): string[] {
         if (!(collection === "facts" ? /^[a-z][a-z0-9_]*$/ : /^[a-z][a-z0-9_-]*$/).test(item.id)) errors.push(`${path}.id has an invalid identifier format.`);
       }
       if (collection === "facts" && !categories.has(String(item.category))) errors.push(`${path}.category is not supported.`);
+      if (collection === "facts" && item.red_flag !== undefined && typeof item.red_flag !== "boolean") errors.push(`${path}.red_flag must be a boolean when present.`);
       if (collection === "personalities") {
         if (!voices.has(String(item.voice))) errors.push(`${path}.voice is not supported.`);
         if (!Array.isArray(item.example_lines) || item.example_lines.length === 0 || item.example_lines.some(v => typeof v !== "string" || !v.trim())) errors.push(`${path}.example_lines must contain non-empty strings.`);
