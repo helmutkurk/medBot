@@ -13,7 +13,7 @@ export async function protectRequest(request: Request): Promise<Response | null>
   const url = new URL(request.url), pathname = url.pathname;
   const decision = await gateDecision(request);
   if (decision === "setup") return failure(503, "access_unconfigured", "Demo access is not configured. Please contact the host.");
-  if (decision === "unauthorized") return failure(401, "access_required", "Your demo access has expired. Open /access and enter the shared passcode.");
+  if (decision === "unauthorized") return failure(401, "access_required", "Access required. Open /access and enter the shared passcode (sessions last 12 hours).");
   if (decision === "login") return new Response(null, { status: 307, headers: { Location: new URL("/access", url).href, "Cache-Control": "private, no-store" } });
   if (publicPath(pathname) && pathname !== "/access/login") return null;
   if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {

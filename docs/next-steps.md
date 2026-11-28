@@ -1,7 +1,31 @@
-# Checkpoint and plan — 2026-11-28 03:00 Berlin
+# Checkpoint and plan — 2026-11-28 13:30 Berlin
 
 Claude (orchestrator), 2026-11-28. Resume from here. Deadlines: feature freeze **Sat 28-11 18:00**, submission
 candidate Sun 08:00, submission **Sun 29-11 10:00**. Branch `feat/Helmut`; Helmut merges to `main`.
+
+## Final state (verified 13:30)
+- `npm run check` green (144 tests). All work committed and pushed on `feat/Helmut`.
+- Hosted: Vercel project **med-bot** (team hks11), production = `feat/Helmut` @ 0494e45, fra1, passcode gate
+  verified (`/` → `/access`, API 401 without cookie). Public URL https://med-bot-opal.vercel.app.
+  Duplicate project `medbot` (no env vars) deleted by Helmut; production branch tracking set to `feat/Helmut`.
+- Text eval final (n=5 × 8 cells, 12 turns, 36 completed, `eval/summary.md`): contradictions 0, invented 3,
+  unprompted 5, clean interviews 30/36 (83 %), persona 94 %, unknown answers 6 %, text p50 3.1 s.
+  4 failures were coach timeouts → coach now 2 parallel compact requests on gpt-4.1-mini (5–11 s measured).
+- Voice bench v2 (4 cases × 2 personalities, 48 turns): first audio p50 358–543 ms, 0 invented, 0
+  contradictions, 3 unprompted.
+- Features: guided flow, voice + text, Instructor view, reflection, Calgary-Cambridge coach with missed cues,
+  annotated replay, viva, anamnesis export, adaptive learning + spaced red-flag reviews, XP/levels/streak/
+  badges/leaderboard, OSCE station + red-flag sprint + hints, case creator, PWA, light/dark/system theme,
+  Evidence page with Wilson CIs, hosted mode (passcode, limits, feedback, privacy). 9 cases (5 from Christoph).
+
+## Open (owner)
+1. Helmut: headset test of voice v2 (felt latency, cut-offs, anxious delivery); Maya voice audition.
+2. Helmut: send link + passcode to doctor friends; read `/feedback` with the admin code.
+3. Team: merge `feat/Helmut` → `main`, roles (presenter, driver, backup), rehearse pitch twice
+   (`docs/event/pitch-template.md`; replace [pending final eval] with the numbers above).
+4. Helmut: backup video; sponsor talks (`docs/event/pitch-ideas.md`); verify the live submission form.
+5. Optional agents: coach missed-cue recall dropped with gpt-4.1-mini (0 vs 3) — check; 3 invented +
+   5 unprompted remain (chest "squeezing", stairs, negatives); fixed probes for Christoph's 5 cases.
 
 ## What the jury scores (all must be visibly met)
 hackaTUM general criteria (organisers, pasted by Helmut 2026-11-28):
