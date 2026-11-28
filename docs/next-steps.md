@@ -44,8 +44,9 @@ How we answer each (the pitch must say these out loud):
 
 ## Running / waiting at checkpoint
 - New-case text eval n=3, 12 turns → `eval/summary.md` + `eval/results/*.json` (log in session scratchpad).
-- Codex: evidence-grounded cases (AWMF/NICE/ESC, German drug names, natural voices) → scratch copy, then
-  paired eval before replacing `cases/`.
+- Evidence-grounded cases: Codex researched sources but its drafts were NOT saved (sandbox write denied);
+  report + brief in `docs/research/case-grounding.md`. Rerun writing to `docs/research/cases-v3/`, then
+  paired eval before replacing `cases/`. Keep Maya's female voices (commit 9e32b2e).
 - Helmut: blind audition `eval/voice/2026-11-28T01-54-41.965Z-36c498f1/index.html` → pick Maya's voice.
 - Decision for Helmut: product name (shortlist: Anamnesia, VIPatient, SayAah).
 
@@ -67,4 +68,4 @@ How we answer each (the pitch must say these out loud):
 After 18:00: only fixes, evidence and presentation.
 
 ## Quota rhythm
-Codex 5 h window resets 05:40 (was 94 %); Claude week resets Sat 11:00. Parallel max 2 agents.
+Codex 5 h window resets 05:40 (was 89–94 %, effectively out until then); Claude week resets Sat 11:00. Parallel max 2 agents.
