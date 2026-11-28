@@ -1,7 +1,6 @@
 .header { position: sticky; top: 0; z-index: 10; background: var(--header); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); }
 .inner { max-width: 1160px; margin: auto; padding: var(--s2) var(--s5); display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
 .wordmark { display: flex; align-items: center; gap: var(--s2); min-height: 44px; font-size: var(--t-lg); font-weight: 650; letter-spacing: -.04em; text-decoration: none; border-radius: var(--r-sm); margin-right: auto; }
-.logo { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-size: var(--t-lg); line-height: 1; }
 .nav { display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap; }
 .nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: var(--r-sm); font-size: var(--t-sm); font-weight: 550; color: var(--muted); text-decoration: none; }
 .nav a:hover { color: var(--text); background: var(--surface-2); }

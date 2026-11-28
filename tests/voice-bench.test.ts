@@ -68,8 +68,11 @@ test("CLI validates the matrix and preserves defaults", () => {
   for (const args of [["--questions", "9"], ["--voices", ""], ["--prompt", "v2"], ["--models", "unknown"], ["--case"]]) assert.throws(() => parseArguments(args));
 });
 
-test("eight fixed probes retain real fact triggers for every current case", async () => {
+// Cases need an authored false premise before they can join the fixed suite; others must fail loudly.
+const probedCases = ["chest-tightness-01", "abdominal-pain-01", "multimorbid-dizziness", "thunderclap-headache"];
+test("eight fixed probes retain real fact triggers for every probed case", async () => {
   for (const summary of await listCases()) {
+    if (!probedCases.includes(summary.id)) { const other = await loadCase(summary.id); assert.throws(() => questionSuite(other), /No supported fixed probes/); continue; }
     const current = await loadCase(summary.id);
     const suite = questionSuite(current);
     assert.deepEqual(suite.map(s => s.kind), ["opening", "onset", "character", "red_flag", "medications", "false_premise", "absent_info", "repetition"]);

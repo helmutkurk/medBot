@@ -5,7 +5,11 @@ import type { CSSProperties, FormEvent } from "react";
 import { communicationSkills } from "../lib/case/types.ts";
 import { emptyProfile, difficultyFor, recommendNext, updateProfile } from "../lib/engine/learner.ts";
 import type { LearnerProfile, SessionResult } from "../lib/engine/learner.ts";
-import { loadProfile, persistProfile } from "./learner-storage.ts";
+import { loadGame, loadProfile, persistGame, persistProfile } from "./learner-storage.ts";
+import { rewardFor } from "../lib/engine/gamification.ts";
+import type { Reward } from "../lib/engine/gamification.ts";
+import { syncLeaderboard } from "./leaderboard-client.ts";
+import { RewardPanel } from "./Rewards.tsx";
 import type { ChatMessage, GuardResult, PatientTurn } from "../lib/case/types.ts";
 import type { Health, InterviewCase } from "./types.ts";
 import { AnamnesisPanel } from "./AnamnesisPanel.tsx";
@@ -69,6 +73,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
   const [instructor, setInstructor] = useState(false);
   const [reflection, setReflection] = useState<SessionResult | null>(null);
   const reflectionRef = useRef<SessionResult | null>(null);
+  const [reward, setReward] = useState<Reward | null>(null);
   const profileRef = useRef<LearnerProfile>(profile);
   const storedOutcome = useRef(false);
   const [concern, setConcern] = useState("");
@@ -189,6 +194,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     setHint("");
     setEnded(false);
     setReflection(null);
+    setReward(null);
     reflectionRef.current = null;
     storedOutcome.current = false;
     setConcern("");
@@ -301,10 +307,16 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
   }
 
   function saveSession(result: SessionResult): void {
-    const next = updateProfile(loadProfile().profile, result);
+    const before = loadProfile().profile;
+    const next = updateProfile(before, result);
     profileRef.current = next;
     setProfile(next);
     setPersistent(persistProfile(next));
+    const now = new Date().toISOString();
+    const earned = rewardFor(before, next, loadGame(before, now).game, result, now);
+    persistGame(earned.game);
+    setReward(earned);
+    void syncLeaderboard(next, earned.game, now);
   }
 
   function startText(): void {
@@ -541,6 +553,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
         {ended && reflection && <section ref={feedback} className={`${styles.card} ${styles.summary}`} aria-labelledby="summary-title">
           <div className={styles.summaryHead}><div><span className={styles.eyebrow}>Step 4 of 4 · Feedback</span><h2 id="summary-title">Every question builds the picture.</h2></div><button type="button" className={styles.secondary} disabled={!messages.length} onClick={downloadTranscript}>Download transcript</button></div>
           <p>Your concern: {reflection.reflection.concern} · Confidence {reflection.reflection.confidence}/5.</p>
+          {reward && <RewardPanel reward={reward} />}
           <div className={styles.next} aria-labelledby="next-title">
             <h3 id="next-title">What next?</h3>
             {awaitingFeedback ? <p className={styles.subtle} role="status">Your next patient is chosen when the feedback below is ready. It stays on this page.</p> : <>
@@ -553,7 +566,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
             </>}
           </div>
           <div className={styles.summaryStats}><div><strong>{revealed.size}<small> / {selected?.facts.length}</small></strong><span>Facts covered</span></div><div><strong>{(selected?.facts.length ?? 0) - revealed.size}</strong><span>Still to explore</span></div><div><strong>{messages.filter(m => m.role === "patient").length}</strong><span>Patient turns</span></div>{(["voice", "text"] as const).map(kind => { const values = timings.filter(t => t.kind === kind).map(t => t.ms); return values.length ? <div key={kind}><strong>{duration(median(values))}</strong><span>Median {kind === "voice" ? "voice onset" : "text round trip"}</span></div> : null; })}</div>
-          <div className={styles.summaryPanels}><div className={styles.coachWrap}><h3>Coach report</h3><CoachPanel state={coach} hasMessages={messages.some(m => m.text.trim())} onRetry={() => void loadCoach(generation.current)} /></div>
+          <div className={styles.summaryPanels}><div className={styles.coachWrap}><h3>Coach report</h3><CoachPanel redFlagIds={new Set(selected?.facts.filter(f => f.redFlag).map(f => f.id))} state={coach} hasMessages={messages.some(m => m.text.trim())} onRetry={() => void loadCoach(generation.current)} /></div>
           <div className={styles.coachWrap}><h3>Anamnesis</h3><AnamnesisPanel state={anamnesis} onRetry={() => void loadAnamnesis(generation.current)} /></div></div>
         </section>}
       </>}
