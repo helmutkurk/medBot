@@ -11,6 +11,8 @@ function envelope(value: unknown): Response {
   return Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(value) }] }] });
 }
 
+const byName = (handlers: Record<string, () => Response>) => async (_url: unknown, init: RequestInit) => handlers[JSON.parse(String(init.body)).text.format.name]!();
+
 test("coach coverage and membership use valid disclosed ids while OpenAI supplies feedback", async t => {
   const question = "Do you smoke?";
   const history: ChatMessage[] = [{ role: "student", text: question }, { role: "patient", text: chest.facts.find(f => f.id === "smoking")!.lay }];
@@ -47,7 +49,7 @@ test("coach accepts only transcript quotes and keeps membership independent of m
 });
 
 test("coach rejects malformed output and surfaces provider failures", async t => {
-  for (const value of [null, {}, { ...feedback, strengths: [12] }, { ...feedback, quotes: [{}] }]) {
+  for (const value of [null, {}]) {
     t.mock.method(globalThis, "fetch", async () => envelope(value));
     await assert.rejects(coachReport(chest, [], [], opts), error => error instanceof OpenAIError && error.kind === "invalid_response");
   }
@@ -73,6 +75,7 @@ test("coach requests strict Calgary-Cambridge ratings and validates exact studen
     const body = JSON.parse(String(init.body));
     assert.equal(body.text.format.strict, true);
     assert.equal(body.store, false);
+    if (body.text.format.name === "coach_coverage") return envelope(feedback);
     assert.deepEqual(body.text.format.schema.properties.communication.required, [...communicationSkills]);
     assert.deepEqual(JSON.parse(body.input[0].content).focus, ["Explore ICE"]);
     return envelope({ ...feedback, communication });
@@ -82,7 +85,8 @@ test("coach requests strict Calgary-Cambridge ratings and validates exact studen
   assert.equal(report.score, 0);
   for (const invalid of [undefined, {}, { ...communication, empathy: { score: 3, evidence: "", tip: "Try" } }, { ...communication, empathy: { score: 0, evidence: "", tip: "" } }]) {
     t.mock.method(globalThis, "fetch", async () => envelope({ ...feedback, communication: invalid }));
-    await assert.rejects(coachReport(chest, [{ role: "student", text: question }, { role: "patient", text: "Patient-only wording" }], [], opts), error => error instanceof OpenAIError && error.kind === "invalid_response");
+    t.mock.method(globalThis, "fetch", byName({ coach_coverage: () => envelope(feedback), coach_communication: () => envelope({ ...feedback, communication: invalid }) }));
+    assert.equal((await coachReport(chest, [{ role: "student", text: question }, { role: "patient", text: "Patient-only wording" }], [], opts)).partial?.missing, "communication");
   }
   // Unverifiable or patient-side quotes are dropped rather than failing the whole report.
   for (const evidence of ["", "Invented", "Patient-only wording"]) {
@@ -112,4 +116,52 @@ test("missed opportunities require adjacent patient/student quotes at the claime
     t.mock.method(globalThis, "fetch", async () => envelope({ ...feedback, opportunities: [invalid] }));
     assert.deepEqual((await coachReport(chest, history, [], opts)).opportunities, []);
   }
+});
+
+test("coach sends two parallel, size-limited requests and merges them", async t => {
+  const names: string[] = [];
+  const first = (chest.facts.find(f => f.red_flag) ?? chest.facts[0]!).id;
+  const mock = t.mock.method(globalThis, "fetch", async (_url: unknown, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    names.push(body.text.format.name);
+    assert.match(body.instructions, /at most 20 words/);
+    if (body.text.format.name === "coach_coverage") {
+      assert.ok(!("communication" in body.text.format.schema.properties));
+      // Only red flags plus at most five other gaps are sent as suggestion targets.
+      const sent = JSON.parse(body.instructions.slice(body.instructions.indexOf("{"))) as { gaps: { id: string }[] };
+      const redFlags = chest.facts.filter(f => f.red_flag).length;
+      assert.ok(sent.gaps.length <= redFlags + 5);
+      return envelope({ quotes: [], suggestions: [{ fact_id: first, question: Array.from({ length: 50 }, () => "word").join(" ") + "?" }] });
+    }
+    assert.ok(!("quotes" in body.text.format.schema.properties));
+    assert.equal(body.text.format.schema.properties.opportunities.maxItems, 3);
+    return envelope({ ...feedback, strengths: [Array.from({ length: 80 }, () => "long").join(" ")] });
+  });
+  const report = await coachReport(chest, [], [], opts);
+  assert.equal(mock.mock.callCount(), 2);
+  assert.deepEqual(names.sort(), ["coach_communication", "coach_coverage"]);
+  assert.equal(report.partial, undefined);
+  assert.equal(report.missed.find(f => f.factId === first)?.suggestedQuestion.split(" ").length, 30);
+  assert.equal(report.strengths[0]?.split(" ").length, 30);
+  assert.deepEqual(report.improvements, feedback.improvements);
+});
+
+test("coach returns the surviving part with a partial flag when one request fails", async t => {
+  t.mock.method(globalThis, "fetch", byName({ coach_coverage: () => new Response(null, { status: 400 }), coach_communication: () => envelope(feedback) }));
+  const noCoverage = await coachReport(chest, [], ["smoking"], opts);
+  assert.equal(noCoverage.partial?.missing, "coverage");
+  assert.deepEqual(noCoverage.covered.map(f => f.factId), ["smoking"]);
+  assert.ok(noCoverage.missed.every(m => m.suggestedQuestion.endsWith("?")));
+  assert.deepEqual(noCoverage.strengths, feedback.strengths);
+
+  t.mock.method(globalThis, "fetch", byName({ coach_coverage: () => envelope(feedback), coach_communication: () => envelope({ nope: true }) }));
+  const noComm = await coachReport(chest, [], ["smoking"], opts);
+  assert.equal(noComm.partial?.missing, "communication");
+  assert.equal(noComm.score, Math.round(100 / chest.facts.length));
+  assert.deepEqual(noComm.strengths, []);
+  assert.deepEqual(noComm.opportunities, []);
+  assert.equal(Object.keys(noComm.communication).length, communicationSkills.length);
+
+  t.mock.method(globalThis, "fetch", byName({ coach_coverage: () => new Response(null, { status: 400 }), coach_communication: () => new Response(null, { status: 400 }) }));
+  await assert.rejects(coachReport(chest, [], [], opts), error => error instanceof OpenAIError && error.status === 400);
 });

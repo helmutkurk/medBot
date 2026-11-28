@@ -11,6 +11,8 @@ export function getModels() {
     realtime: process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime",
     text: process.env.OPENAI_TEXT_MODEL?.trim() || DEFAULT_TEXT_MODEL,
     patient: process.env.OPENAI_PATIENT_MODEL?.trim() || DEFAULT_PATIENT_MODEL,
+    // Coach grades the student (quotes are verified deterministically); a non-reasoning model keeps feedback fast.
+    coach: process.env.OPENAI_COACH_MODEL?.trim() || "gpt-4.1-mini",
     transcription: process.env.OPENAI_TRANSCRIBE_MODEL?.trim() || "gpt-4o-mini-transcribe",
   };
 }

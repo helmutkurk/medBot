@@ -69,7 +69,8 @@ test("parallel eval checkpoints completions before a slow first interview and or
   const values: Record<string, unknown> = {
     student_question: { question: "Hello?" }, patient_turn: { reply: "Hello.", revealed: [] },
     guard_result: { ok: true, issues: [], mode: "openai" }, personality_guess: { personality_id: "anxious" },
-    coach_report: { opportunities: [], strengths: [], improvements: [], quotes: [], suggestions: [], communication: Object.fromEntries(communicationSkills.map(skill => [skill, { score: 0, evidence: "", tip: "Practise this skill explicitly." }])) },
+    coach_coverage: { quotes: [], suggestions: [] },
+    coach_communication: { opportunities: [], strengths: [], improvements: [], communication: Object.fromEntries(communicationSkills.map(skill => [skill, { score: 0, evidence: "", tip: "Practise this skill explicitly." }])) },
     anamnesis_report: { note: "Not documented.", documented: [] },
   };
   const slow = Promise.withResolvers<void>();
@@ -141,7 +142,8 @@ for (const failureCount of [0, 1, 2]) {
       patient_turn: { reply: "Hello.", revealed: [] },
       guard_result: { ok: failureCount !== 1, issues: failureCount === 1 ? [{ type: "invented", detail: "Unsupported detail." }] : [], mode: "openai" },
       personality_guess: { personality_id: "downplaying" },
-      coach_report: { opportunities: [], strengths: [], improvements: [], quotes: [], suggestions: [], communication: Object.fromEntries(communicationSkills.map(skill => [skill, { score: 0, evidence: "", tip: "Practise this skill explicitly." }])) },
+      coach_coverage: { quotes: [], suggestions: [] },
+    coach_communication: { opportunities: [], strengths: [], improvements: [], communication: Object.fromEntries(communicationSkills.map(skill => [skill, { score: 0, evidence: "", tip: "Practise this skill explicitly." }])) },
       anamnesis_report: { note: "Not documented.", documented: [] },
     };
     const results = path.join(directory, "eval", "results");
@@ -158,7 +160,7 @@ for (const failureCount of [0, 1, 2]) {
         assert.equal(contents.trim().split("\n").filter(Boolean).length, interviewNumber);
         interviewNumber++;
       }
-      if (name === "coach_report" && interviewNumber <= failureCount) {
+      if (name.startsWith("coach_") && interviewNumber <= failureCount) {
         return new Response("private provider body placeholder", { status: 400 });
       }
       return Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(values[name]) }] }] });
