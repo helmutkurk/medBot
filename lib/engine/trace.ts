@@ -10,7 +10,16 @@ export interface TraceContext {
   personalityId?: string;
   source?: "app" | "eval";
 }
-export interface LlmTrace extends TokenUsage {
+export const TURN_TIMING_KEYS = ["speechToFirstAudioDeltaMs", "speechToFirstAudioBufferMs", "speechToFirstTranscriptDeltaMs", "speechToFirstToolCallMs", "toolAckMs"] as const;
+export interface RealtimeTurnTiming {
+  speechToFirstAudioDeltaMs?: number;
+  speechToFirstAudioBufferMs?: number;
+  speechToFirstTranscriptDeltaMs?: number;
+  speechToFirstToolCallMs?: number;
+  toolAckMs: number;
+  toolCallCount: number;
+}
+export interface LlmTrace extends TokenUsage, Partial<RealtimeTurnTiming> {
   ts: string;
   operation: TraceContext["operation"];
   route?: string;
@@ -24,6 +33,9 @@ export interface LlmTrace extends TokenUsage {
   source: "app" | "eval";
   unknownModel?: boolean;
   usageMissing?: boolean;
+  kind?: "response" | "transcription" | "turn";
+  turnId?: string;
+  interrupted?: boolean;
 }
 
 export function traceDirectory(): string {
@@ -39,6 +51,10 @@ export function traceFields(t: LlmTrace): LlmTrace {
     caseId: t.caseId, personalityId: t.personalityId, source: t.source,
     audioInputTokens: t.audioInputTokens, audioOutputTokens: t.audioOutputTokens, cachedAudioTokens: t.cachedAudioTokens,
     unknownModel: t.unknownModel, usageMissing: t.usageMissing,
+    kind: t.kind, turnId: t.turnId, interrupted: t.interrupted,
+    speechToFirstAudioDeltaMs: t.speechToFirstAudioDeltaMs, speechToFirstAudioBufferMs: t.speechToFirstAudioBufferMs,
+    speechToFirstTranscriptDeltaMs: t.speechToFirstTranscriptDeltaMs, speechToFirstToolCallMs: t.speechToFirstToolCallMs,
+    toolAckMs: t.toolAckMs, toolCallCount: t.toolCallCount,
   };
 }
 let warned = false;

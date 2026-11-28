@@ -102,6 +102,36 @@ test("aggregation ignores malformed and partial lines, filters source and keeps 
   assert.equal(summary.totals.calls, 65); assert.equal(summary.recent.length, 50);
 });
 
+test("turn timings persist without private data or inflating usage calls/tokens", async t => {
+  const directory = await isolate(t);
+  const turn = {
+    operation: "realtime", kind: "turn", status: "ok", caseId: "case-1", personalityId: "quiet",
+    latencyMs: 1000, inputTokens: 0, outputTokens: 0, turnId: "turn_offline-1", interrupted: false,
+    speechToFirstAudioDeltaMs: 220, speechToFirstAudioBufferMs: 240, speechToFirstTranscriptDeltaMs: 180,
+    speechToFirstToolCallMs: 300, toolAckMs: 1, toolCallCount: 2,
+  };
+  assert.equal((await post(realtime)).status, 200);
+  assert.equal((await post(turn)).status, 200);
+  const summary = await loadUsage();
+  assert.equal(summary.totals.calls, 1);
+  assert.equal(summary.totals.inputTokens, realtime.inputTokens);
+  assert.equal(summary.byOperation[0]?.calls, 1);
+  assert.equal(summary.byModel.reduce((total, row) => total + row.calls, 0), 1);
+  assert.equal(summary.recent[0]?.kind, "turn");
+  assert.equal(summary.recent[0]?.speechToFirstAudioDeltaMs, 220);
+  assert.equal(summary.recent[0]?.speechToFirstTranscriptDeltaMs, 180);
+  assert.equal(summary.recent[0]?.toolAckMs, 1);
+  assert.equal(summary.recent[0]?.usageMissing, undefined);
+  assert.ok((await readFile(path.join(directory, "llm.jsonl"), "utf8")).includes('"speechToFirstAudioBufferMs":240'));
+  for (const change of [
+    { speechToFirstAudioDeltaMs: -1 }, { speechToFirstTranscriptDeltaMs: "PRIVATE" },
+    { speechToFirstAudioBufferMs: 1001 }, { toolCallCount: 1.5 }, { toolAckMs: null },
+    { turnId: "PRIVATE TEXT" }, { interrupted: "true" }, { inputTokens: 1 }, { usageMissing: false },
+    { transcript: "PRIVATE" }, { kind: "response" },
+  ]) assert.equal((await post({ ...turn, ...change })).status, 400, JSON.stringify(change));
+  assert.equal((await loadUsage()).recent.length, 2);
+});
+
 test("pricing handles each text model, dated snapshots and unknown models", () => {
   for (const [model, cost] of [["gpt-5-mini", 0.00056], ["gpt-5-nano", 0.000112], ["gpt-5", 0.0028], ["gpt-4.1-mini", 0.0006]] as const) {
     const estimate = estimateCost(model, { inputTokens: 1000, outputTokens: 200, cachedTokens: 400, reasoningTokens: 50 });

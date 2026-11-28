@@ -1,4 +1,7 @@
 import { isRecord } from "../../lib/case/validate.ts";
+import type { RealtimeTurnTiming } from "../../lib/engine/trace.ts";
+import { needsAudioFollowUp } from "./response.ts";
+import type { ResponseProgress } from "./response.ts";
 
 export type VoiceStatus = "Connecting" | "Listening" | "Patient speaking" | "Thinking";
 
@@ -29,7 +32,10 @@ export class RealtimeInterview {
   private traceWarningShown = false;
   private turnStarted: number | null = null;
   private outputPlaying = false;
-  private continueAfterTools = false;
+  private responses = new Map<string, ResponseProgress>();
+  private activeResponse: string | null = null;
+  private turn = 0;
+  private turnTiming: { started: number; turn: number; id: string; metrics: RealtimeTurnTiming } | null = null;
   private handledCalls = new Set<string>();
   private seenMessages = new Set<string>();
   private callbacks: VoiceCallbacks;
@@ -120,6 +126,8 @@ export class RealtimeInterview {
 
   sendText(text: string): void {
     if (this.channel?.readyState !== "open") throw new Error("Voice is still connecting. Please try again in a moment.");
+    this.finishTurnTiming();
+    this.interruptResponses();
     const id = `student_${crypto.randomUUID()}`;
     this.send({ type: "conversation.item.create", item: { id, type: "message", role: "user", content: [{ type: "input_text", text }] } });
     this.callbacks.onMessage("student", text, id);
@@ -135,14 +143,24 @@ export class RealtimeInterview {
   private receive(data: unknown): void {
     if (this.closed || typeof data !== "string") return;
     let event: Record<string, unknown>;
-    try { event = JSON.parse(data) as Record<string, unknown>; } catch { return; }
+    try {
+      const parsed: unknown = JSON.parse(data);
+      if (!isRecord(parsed)) return;
+      event = parsed;
+    } catch { return; }
     switch (event.type) {
       case "input_audio_buffer.speech_started":
+        this.finishTurnTiming(true);
+        this.interruptResponses();
         this.turnStarted = null;
+        this.outputPlaying = false;
         this.callbacks.onStatus("Listening");
         break;
       case "input_audio_buffer.speech_stopped":
+        this.finishTurnTiming();
+        this.turn++;
         this.turnStarted = performance.now();
+        this.turnTiming = { started: this.turnStarted, turn: this.turn, id: `turn_${crypto.randomUUID()}`, metrics: { toolCallCount: 0, toolAckMs: 0 } };
         this.callbacks.onStatus("Thinking");
         break;
       case "input_audio_buffer.committed":
@@ -154,6 +172,8 @@ export class RealtimeInterview {
       case "output_audio_buffer.started":
       case "response.output_audio.delta":
       case "response.audio.delta":
+        if (!this.noteResponseAudio(event)) break;
+        this.noteTurnTiming(event, event.type === "output_audio_buffer.started" ? "speechToFirstAudioBufferMs" : "speechToFirstAudioDeltaMs");
         if (this.turnStarted !== null) {
           this.callbacks.onLatency(performance.now() - this.turnStarted);
           this.turnStarted = null;
@@ -163,7 +183,9 @@ export class RealtimeInterview {
         break;
       case "output_audio_buffer.stopped":
       case "output_audio_buffer.cleared":
+        if (!this.eventIsCurrent(event)) break;
         this.outputPlaying = false;
+        this.finishTurnTiming(event.type === "output_audio_buffer.cleared");
         this.callbacks.onStatus("Listening");
         break;
       case "conversation.item.input_audio_transcription.completed":
@@ -174,37 +196,47 @@ export class RealtimeInterview {
         this.traceResponse({ id: `transcription-${event.item_id}`, status: "failed" }, "transcription");
         this.callbacks.onError("A spoken question could not be transcribed. The patient can still hear you; the transcript and guard may be incomplete.");
         break;
+      case "response.output_audio_transcript.delta":
+      case "response.audio_transcript.delta":
+        if (typeof event.delta === "string" && event.delta.length && this.noteResponseAudio(event)) {
+          this.noteTurnTiming(event, "speechToFirstTranscriptDeltaMs");
+        }
+        break;
       case "response.output_audio_transcript.done":
       case "response.audio_transcript.done":
+        if (typeof event.transcript === "string" && event.transcript.length) this.noteResponseAudio(event);
         this.message("patient", event.transcript, event.item_id);
         break;
       case "response.function_call_arguments.done": {
-        if (typeof event.call_id !== "string" || this.handledCalls.has(event.call_id)) break;
-        this.handledCalls.add(event.call_id);
-        let ok = false;
-        try {
-          const args: unknown = typeof event.arguments === "string" ? JSON.parse(event.arguments) : null;
-          if (event.name === "reveal_fact" && args && typeof args === "object" && "fact_id" in args && typeof args.fact_id === "string" && this.factIds.has(args.fact_id)) {
-            this.callbacks.onFact(args.fact_id);
-            ok = true;
-          }
-        } catch { /* Invalid tool arguments receive an explicit failure result. */ }
-        this.send({ type: "conversation.item.create", item: { type: "function_call_output", call_id: event.call_id, output: JSON.stringify({ ok }) } });
-        this.continueAfterTools = true;
+        this.acknowledgeTool(event);
         break;
       }
       case "response.created": {
-        if (isRecord(event.response) && typeof event.response.id === "string") this.responseStarted.set(event.response.id, performance.now());
+        if (isRecord(event.response) && typeof event.response.id === "string") {
+          const id = event.response.id;
+          this.responseStarted.set(id, performance.now());
+          this.progress(id);
+          this.activeResponse = id;
+        }
         break;
       }
       case "response.done": {
         const response = isRecord(event.response) ? event.response : undefined;
-        if (response) this.traceResponse(response);
-        if (response?.status === "failed") this.callbacks.onError("The patient could not finish this response. Please try your question again.");
-        if (this.continueAfterTools) {
-          this.continueAfterTools = false;
+        if (!response || typeof response.id !== "string") break;
+        const progress = this.progress(response.id);
+        // response.done is also authoritative if an arguments.done event was missed.
+        if (Array.isArray(response.output)) for (const item of response.output) {
+          if (isRecord(item) && item.type === "function_call") this.acknowledgeTool({ ...item, response_id: response.id });
+        }
+        this.traceResponse(response);
+        if (!progress.done && response.status === "failed") this.callbacks.onError("The patient could not finish this response. Please try your question again.");
+        const followUp = needsAudioFollowUp(response, progress, this.turn);
+        const wasDone = progress.done;
+        progress.done = true;
+        if (followUp) {
           this.send({ type: "response.create" });
-        } else if (!this.outputPlaying) {
+          this.callbacks.onStatus("Thinking");
+        } else if (!wasDone && !progress.interrupted && progress.turn === this.turn && !this.outputPlaying) {
           this.callbacks.onStatus("Listening");
         }
         break;
@@ -214,6 +246,74 @@ export class RealtimeInterview {
         if (!this.outputPlaying) this.callbacks.onStatus("Listening");
         break;
     }
+  }
+
+  private progress(id: string): ResponseProgress {
+    let progress = this.responses.get(id);
+    if (!progress) {
+      progress = { turn: this.turn, hasAudio: false, hasTool: false, interrupted: false, done: false };
+      this.responses.set(id, progress);
+    }
+    return progress;
+  }
+
+  private eventIsCurrent(event: Record<string, unknown>): boolean {
+    const id = typeof event.response_id === "string" ? event.response_id : this.activeResponse;
+    if (!id) return true;
+    const progress = this.progress(id);
+    return progress.turn === this.turn && !progress.interrupted;
+  }
+
+  private noteResponseAudio(event: Record<string, unknown>): boolean {
+    const id = typeof event.response_id === "string" ? event.response_id : this.activeResponse;
+    if (id) this.progress(id).hasAudio = true;
+    return this.eventIsCurrent(event);
+  }
+
+  private interruptResponses(): void {
+    for (const progress of this.responses.values()) progress.interrupted = true;
+    this.activeResponse = null;
+    this.turn++;
+  }
+
+  private noteTurnTiming(event: Record<string, unknown>, key: "speechToFirstAudioDeltaMs" | "speechToFirstAudioBufferMs" | "speechToFirstTranscriptDeltaMs" | "speechToFirstToolCallMs"): void {
+    const timing = this.turnTiming;
+    if (timing && timing.turn === this.turn && this.eventIsCurrent(event) && timing.metrics[key] === undefined) {
+      timing.metrics[key] = performance.now() - timing.started;
+    }
+  }
+
+  private acknowledgeTool(event: Record<string, unknown>): void {
+    if (typeof event.call_id !== "string" || this.handledCalls.has(event.call_id)) return;
+    this.handledCalls.add(event.call_id);
+    const id = typeof event.response_id === "string" ? event.response_id : this.activeResponse;
+    if (id) this.progress(id).hasTool = true;
+    const started = performance.now();
+    this.noteTurnTiming(event, "speechToFirstToolCallMs");
+    let ok = false;
+    try {
+      const args: unknown = typeof event.arguments === "string" ? JSON.parse(event.arguments) : null;
+      if (event.name === "reveal_fact" && isRecord(args) && typeof args.fact_id === "string" && this.factIds.has(args.fact_id)) {
+        this.callbacks.onFact(args.fact_id);
+        ok = true;
+      }
+    } catch { /* Invalid tool arguments receive an explicit failure result. */ }
+    this.send({ type: "conversation.item.create", item: { type: "function_call_output", call_id: event.call_id, output: JSON.stringify({ ok }) } });
+    if (this.turnTiming && this.eventIsCurrent(event)) {
+      this.turnTiming.metrics.toolCallCount++;
+      this.turnTiming.metrics.toolAckMs += performance.now() - started;
+    }
+  }
+
+  private finishTurnTiming(interrupted = false): void {
+    const timing = this.turnTiming;
+    if (!timing) return;
+    this.turnTiming = null;
+    this.postTrace({
+      operation: "realtime", kind: "turn", status: "ok", caseId: this.caseId, personalityId: this.personalityId,
+      latencyMs: performance.now() - timing.started, inputTokens: 0, outputTokens: 0,
+      turnId: timing.id, ...timing.metrics, interrupted,
+    });
   }
 
   private traceResponse(response: Record<string, unknown>, kind: "response" | "transcription" = "response"): void {
@@ -235,7 +335,11 @@ export class RealtimeInterview {
       cachedTokens: tokens(input.cached_tokens), audioInputTokens: tokens(input.audio_tokens),
       audioOutputTokens: tokens(output.audio_tokens), cachedAudioTokens: tokens(cached.audio_tokens),
     };
-    // Keep the final usage request alive when the interview is closed or the page changes.
+    this.postTrace(payload);
+  }
+
+  private postTrace(payload: object): void {
+    // Keep final usage and timing requests alive on close/navigation.
     void fetch("/api/trace", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), keepalive: true })
       .then(result => { if (!result.ok) throw new Error("Trace failed"); })
       .catch(() => {
@@ -304,6 +408,7 @@ export class RealtimeInterview {
 
   close(): void {
     if (this.closed) return;
+    this.finishTurnTiming(this.outputPlaying);
     this.closed = true;
     this.abort.abort();
     cancelAnimationFrame(this.frame);

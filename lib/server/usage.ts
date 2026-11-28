@@ -53,12 +53,15 @@ export async function loadUsage(source?: "app" | "eval", directory = traceDirect
         let trace: unknown;
         try { trace = JSON.parse(line); } catch { continue; }
         if (!validTrace(trace) || (source && trace.source !== source)) continue;
-        add(result.totals, trace);
-        const operation = operations.get(trace.operation) ?? { ...totals(), operation: trace.operation };
-        add(operation, trace); operations.set(trace.operation, operation);
-        const model = models.get(trace.model) ?? { ...totals(), model: trace.model, unknownModel: false };
-        model.unknownModel ||= trace.unknownModel === true;
-        add(model, trace); models.set(trace.model, model);
+        // Turn timing records are observations, not additional provider calls.
+        if (trace.kind !== "turn") {
+          add(result.totals, trace);
+          const operation = operations.get(trace.operation) ?? { ...totals(), operation: trace.operation };
+          add(operation, trace); operations.set(trace.operation, operation);
+          const model = models.get(trace.model) ?? { ...totals(), model: trace.model, unknownModel: false };
+          model.unknownModel ||= trace.unknownModel === true;
+          add(model, trace); models.set(trace.model, model);
+        }
         if (!result.since || trace.ts < result.since) result.since = trace.ts;
         result.recent.push(traceFields(trace));
         if (result.recent.length > 50) result.recent.shift();

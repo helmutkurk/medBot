@@ -1,6 +1,6 @@
 import { estimateCost } from "../../../lib/engine/pricing.ts";
 import { recordTrace } from "../../../lib/engine/trace.ts";
-import { buildPatientInstructions, buildRevealFactTool } from "../../../lib/engine/index.ts";
+import { buildRealtimeInstructions, buildRealtimeSpeed, buildRevealFactTool } from "../../../lib/case/prompt.ts";
 import { getModels, openAIHeaders, requireOpenAIKey } from "../../../lib/server/env.ts";
 import { body, HttpError, interviewFrom, json, requestSignal, route } from "../../../lib/server/http.ts";
 
@@ -21,12 +21,13 @@ export function POST(request: Request) {
           expires_after: { anchor: "created_at", seconds: 600 },
           session: {
             type: "realtime", model: models.realtime,
-            instructions: buildPatientInstructions(c, p),
+            instructions: buildRealtimeInstructions(c, p),
+            output_modalities: ["audio"],
             audio: {
-              input: { transcription: { model: models.transcription }, turn_detection: { type: "semantic_vad" } },
-              output: { voice: p.voice },
+              input: { transcription: { model: models.transcription }, turn_detection: { type: "semantic_vad", eagerness: "high", create_response: true, interrupt_response: true } },
+              output: { voice: p.voice, speed: buildRealtimeSpeed(p) },
             },
-            tools: [buildRevealFactTool(c)], tool_choice: "auto",
+            tools: [buildRevealFactTool(c, true)], tool_choice: "auto",
           },
         }),
       });

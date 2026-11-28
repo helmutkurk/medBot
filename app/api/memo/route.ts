@@ -1,4 +1,4 @@
-import { buildConsistencyMemo, buildPatientInstructions } from "../../../lib/engine/index.ts";
+import { buildConsistencyMemo, buildRealtimeInstructions } from "../../../lib/case/prompt.ts";
 import { requireOpenAIKey } from "../../../lib/server/env.ts";
 import { body, ids, interviewFrom, json, route } from "../../../lib/server/http.ts";
 
@@ -12,6 +12,6 @@ export function POST(request: Request) {
     const data = await body(request);
     const revealed = ids(data.revealed, "revealed");
     const { c, p } = await interviewFrom(data);
-    return json({ instructions: `${buildPatientInstructions(c, p)}\n\n${buildConsistencyMemo(c, revealed)}` });
+    return json({ instructions: `${buildRealtimeInstructions(c, p)}\n\n${buildConsistencyMemo(c, revealed)}` });
   });
 }
