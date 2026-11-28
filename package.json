@@ -11,7 +11,8 @@
     "test": "node --import ./tests/trace-setup.ts --test \"tests/**/*.test.ts\"",
     "eval": "node --env-file-if-exists=.env.local scripts/eval.ts",
     "check": "npm run typecheck && npm test && npm run build",
-    "smoke": "bash scripts/smoke-web.sh"
+    "smoke": "bash scripts/smoke-web.sh",
+    "voice-bench": "node --env-file-if-exists=.env.local scripts/voice-bench.ts"
   },
   "engines": {
     "node": ">=24"
