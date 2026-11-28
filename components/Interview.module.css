@@ -222,3 +222,13 @@ a.secondary { display: inline-flex; align-items: center; justify-content: center
 }
 @media (max-width: 460px) { .main { padding-bottom: var(--s4); } }
 @media (max-width: 600px) { .badge { display: none; } }
+
+.modePicker { border: 0; padding: 0; margin: 24px 0; }
+.modePicker legend { font-weight: 700; margin-bottom: 12px; }
+.modeOptions { display: flex; flex-wrap: wrap; gap: 8px; }
+.modeOptions button { min-height: 44px; flex: 1 1 180px; text-align: left; white-space: normal; }
+.modeOptions small { display: block; font-weight: 400; margin-top: 8px; }
+.clock { display: flex; gap: 16px; flex-wrap: wrap; padding: 16px; border: 1px solid currentColor; border-radius: 12px; margin: 16px 0; }
+.replay { padding-left: 24px; }
+.replay li { padding: 16px 0; border-bottom: 1px solid var(--border, #ddd); overflow-wrap: anywhere; }
+.reflection textarea { width: 100%; max-width: 100%; min-height: 120px; font: inherit; padding: 12px; border-radius: 8px; border: 1px solid var(--border, #777); background: var(--surface, white); color: inherit; }

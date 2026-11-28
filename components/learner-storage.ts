@@ -14,6 +14,10 @@ const finite = (v: unknown, max: number): v is number => typeof v === "number" &
 function session(v: unknown): v is SessionResult {
   if (!record(v) || !text(v.id) || !text(v.caseId) || !text(v.personalityId) || !text(v.completedAt) || !Number.isFinite(Date.parse(v.completedAt))
     || !record(v.reflection) || !text(v.reflection.concern, 240) || !finite(v.reflection.confidence, 5) || v.reflection.confidence < 1 || !Number.isInteger(v.reflection.confidence)) return false;
+  if (v.mode !== undefined && !["practice", "osce", "sprint"].includes(String(v.mode))) return false;
+  if (v.hintsUsed !== undefined && (!finite(v.hintsUsed, 1000) || !Number.isInteger(v.hintsUsed))) return false;
+  if (v.elapsedMs !== undefined && !finite(v.elapsedMs, 86_400_000)) return false;
+  if (v.viva !== undefined && (!record(v.viva) || !finite(v.viva.score, 100) || !Number.isInteger(v.viva.score))) return false;
   if (v.outcome === undefined) return true;
   const o = v.outcome;
   return record(o) && finite(o.score, 100) && Array.isArray(o.coverage) && o.coverage.length <= 8 && o.coverage.every(row => record(row) && ["complaint", "symptom", "history", "medication", "allergy", "family", "social", "lifestyle"].includes(String(row.category)) && finite(row.total, 100) && row.total > 0 && finite(row.found, row.total))

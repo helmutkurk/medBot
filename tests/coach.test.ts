@@ -6,7 +6,7 @@ import { buildConsistencyMemo, buildPatientInstructions, coachReport, getPersona
 
 const chest = await loadCase("chest-tightness-01");
 const opts = { apiKey: "placeholder" };
-const feedback = { strengths: ["You asked about smoking."], improvements: ["Explore past history."], quotes: [], suggestions: [], communication: Object.fromEntries(communicationSkills.map(skill => [skill, { score: 0, evidence: "", tip: "Practise this skill explicitly." }])) };
+const feedback = { opportunities: [], strengths: ["You asked about smoking."], improvements: ["Explore past history."], quotes: [], suggestions: [], communication: Object.fromEntries(communicationSkills.map(skill => [skill, { score: 0, evidence: "", tip: "Practise this skill explicitly." }])) };
 function envelope(value: unknown): Response {
   return Response.json({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(value) }] }] });
 }
@@ -92,4 +92,24 @@ test("coach requests strict Calgary-Cambridge ratings and validates exact studen
   }
   t.mock.method(globalThis, "fetch", async () => envelope({ ...feedback, communication: { ...communication, ice_exploration: { score: 1, evidence: "  WORRIES   you most ", tip: "Ask" } } }));
   assert.equal((await coachReport(chest, [{ role: "student", text: question }], [], opts)).communication.ice_exploration.evidence, "WORRIES   you most");
+});
+
+test("missed opportunities require adjacent patient/student quotes at the claimed turn", async t => {
+  const history: ChatMessage[] = [
+    { role: "patient", text: "I am frightened this will happen again." },
+    { role: "student", text: "Do you smoke?" },
+    { role: "patient", text: "No." },
+    { role: "student", text: "Any medicines?" },
+  ];
+  const valid = { turn: 1, patientCue: "frightened", learnerResponse: "Do you smoke?", better: "That sounds frightening. What worries you most?" };
+  t.mock.method(globalThis, "fetch", async () => envelope({ ...feedback, opportunities: [valid,
+    { ...valid, turn: 3 }, // the quoted cue is not the preceding patient turn
+    { ...valid, turn: 0 }, // a patient cannot be the learner response
+  ] }));
+  const report = await coachReport(chest, history, [], opts);
+  assert.deepEqual(report.opportunities, [valid]);
+  for (const invalid of [{ ...valid, patientCue: "invented" }, { ...valid, learnerResponse: "invented" }, { ...valid, patientCue: "" }, { ...valid, turn: 1.5 }, { ...valid, turn: -1 }]) {
+    t.mock.method(globalThis, "fetch", async () => envelope({ ...feedback, opportunities: [invalid] }));
+    assert.deepEqual((await coachReport(chest, history, [], opts)).opportunities, []);
+  }
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
 import { communicationSkills } from "../lib/case/types.ts";
 import { emptyProfile, difficultyFor, recommendNext, updateProfile } from "../lib/engine/learner.ts";
@@ -24,11 +24,19 @@ import { RealtimePreparation } from "./realtime/prepare.ts";
 import { RealtimeInterview } from "./realtime/client.ts";
 import type { VoiceStatus } from "./realtime/client.ts";
 import type { AnamnesisReport, CoachReport } from "../lib/engine/index.ts";
+import { interviewModes, remainingSeconds, sprintScore } from "../lib/engine/interview-mode.ts";
+import type { InterviewMode } from "../lib/engine/interview-mode.ts";
+import type { DisclosureEvent, GuardEvent } from "../lib/engine/replay.ts";
+import { emptyTimings, sessionRecord } from "../lib/engine/session-record.ts";
+import type { SessionTimings } from "../lib/engine/session-record.ts";
+import type { VivaResult } from "../lib/engine/viva.ts";
+import { VivaPanel } from "./VivaPanel.tsx";
+import { AnnotatedReplay } from "./AnnotatedReplay.tsx";
 import styles from "./Interview.module.css";
 
 interface Message extends ChatMessage { id: string }
 interface Timing { ms: number; kind: "voice" | "text" }
-type Warning = { type: string; detail: string };
+type Warning = GuardEvent;
 
 function median(values: number[]): number | null {
   if (!values.length) return null;
@@ -68,6 +76,18 @@ export function Interview({ cases, health }: { cases: InterviewCase[]; health: H
 }
 
 function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
+  const [mode, setMode] = useState<InterviewMode>("practice");
+  const [reading, setReading] = useState<{ kind: "voice" | "text"; deadline: number } | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const deadline = useRef<number | null>(null);
+  const sessionTimes = useRef<SessionTimings>(emptyTimings());
+  const closed = useRef(false);
+  const [hintBusy, setHintBusy] = useState(false);
+  const hintInFlight = useRef(false);
+  const [nudges, setNudges] = useState<{ nudge: string; at: string }[]>([]);
+  const [disclosures, setDisclosures] = useState<DisclosureEvent[]>([]);
+  const [viva, setViva] = useState<VivaResult | null>(null);
+  const [feedbackDepth, setFeedbackDepth] = useState<"brief" | "detailed">("detailed");
   const [cases, setCases] = useState(initialCases);
   const [profile, setProfile] = useState<LearnerProfile>(emptyProfile);
   const [persistent, setPersistent] = useState(true);
@@ -127,7 +147,8 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     setMessages(messagesRef.current);
   }
 
-  function disclose(ids: string[]): void {
+  function disclose(ids: string[], messageId = messagesRef.current.at(-1)?.id): void {
+    if (messageId) setDisclosures(previous => [...previous, ...ids.filter(id => !revealedRef.current.has(id) && selected?.facts.some(f => f.id === id)).map(factId => ({ messageId, factId }))]);
     revealedRef.current = new Set([...revealedRef.current, ...ids.filter(id => selected?.facts.some(f => f.id === id))]);
     setRevealed(revealedRef.current);
   }
@@ -164,15 +185,15 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     }
   }
 
-  async function checkReply(reply: string, history: ChatMessage[], token: number): Promise<void> {
+  async function checkReply(reply: string, history: ChatMessage[], token: number, messageId?: string): Promise<void> {
     setGuardPending(n => n + 1);
     try {
       const result = await post<GuardResult>("/api/guard", { caseId, history, reply }, controller().signal);
       if (token !== generation.current) return;
-      setWarnings(previous => [...previous, ...result.issues]);
+      setWarnings(previous => [...previous, ...result.issues.map(issue => ({ ...issue, messageId }))]);
     } catch (error) {
       if (token === generation.current && !controller().signal.aborted) {
-        setWarnings(previous => [...previous, { type: "guard unavailable", detail: error instanceof Error ? error.message : "This response could not be checked." }]);
+        setWarnings(previous => [...previous, { messageId, type: "guard unavailable", detail: error instanceof Error ? error.message : "This response could not be checked." }]);
       }
     } finally { if (token === generation.current) setGuardPending(n => Math.max(0, n - 1)); }
   }
@@ -198,6 +219,11 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
   }, [caseId, personalityId]);
 
   function clearInterview(): void {
+    closed.current = false;
+    deadline.current = null;
+    sessionTimes.current = emptyTimings();
+    setReading(null); setSecondsLeft(null); setNudges([]); setDisclosures([]); setViva(null);
+    hintInFlight.current = false; setHintBusy(false);
     prewarmed.current?.close();
     prewarmed.current = null;
     generation.current += 1;
@@ -327,6 +353,14 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
   }
 
   function endInterview(): void {
+    if (closed.current) return;
+    closed.current = true;
+    sessionTimes.current.endedAt = new Date().toISOString();
+    sessionTimes.current.elapsedMs = Math.max(0, Date.now() - Date.parse(sessionTimes.current.startedAt ?? sessionTimes.current.endedAt));
+    if (interviewModes[mode].seconds !== null) sessionTimes.current.elapsedMs = Math.min(sessionTimes.current.elapsedMs, interviewModes[mode].seconds! * 1000);
+    deadline.current = null;
+    requests.current?.abort();
+    setBusy(false); sending.current = false; setHintBusy(false);
     voice.current?.close();
     voice.current = null;
     setActive(null);
@@ -335,7 +369,8 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
   }
 
   function saveSession(result: SessionResult): void {
-    const before = loadProfile().profile;
+    reflectionRef.current = result;
+    const before = profileRef.current;
     const next = updateProfile(before, result);
     profileRef.current = next;
     setProfile(next);
@@ -347,13 +382,79 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     void syncLeaderboard(next, earned.game, now);
   }
 
-  function startText(): void {
+  function beginText(): void {
     if (!selected || active || busy) return;
+    const readingStartedAt = reading ? new Date(reading.deadline - 60_000).toISOString() : null;
     clearInterview();
     startedAt.current = performance.now();
+    beginClock(readingStartedAt);
     setActive("text");
     scrollTo(workspace.current);
     setTimeout(() => document.getElementById("question")?.focus({ preventScroll: true }), 0);
+  }
+
+  function beginClock(readingStartedAt: string | null): void {
+    sessionTimes.current.readingStartedAt = readingStartedAt;
+    sessionTimes.current.readingEndedAt = readingStartedAt ? new Date().toISOString() : null;
+    sessionTimes.current.startedAt = new Date().toISOString();
+    const seconds = interviewModes[mode].seconds;
+    deadline.current = seconds === null ? null : Date.now() + seconds * 1000;
+    setSecondsLeft(seconds);
+  }
+
+  function startMode(kind: "voice" | "text"): void {
+    if (active || busy || reading) return;
+    if (mode === "osce") {
+      clearInterview();
+      sessionTimes.current.readingStartedAt = new Date().toISOString();
+      setReading({ kind, deadline: Date.now() + interviewModes.osce.readingSeconds * 1000 });
+      setSecondsLeft(60);
+      scrollTo(workspace.current);
+    } else if (kind === "voice") beginVoice(); else beginText();
+  }
+  function startText(): void { startMode("text"); }
+  function startInterview(): void { startMode("voice"); }
+
+  useEffect(() => {
+    if (!reading) return;
+    const tick = () => {
+      const remaining = remainingSeconds(reading.deadline, Date.now());
+      setSecondsLeft(remaining);
+      if (!remaining) { setReading(null); if (reading.kind === "voice") beginVoice(); else beginText(); }
+    };
+    const timer = setInterval(tick, 250);
+    return () => clearInterval(timer);
+  }, [reading]);
+
+  useEffect(() => {
+    if (!active || deadline.current === null) return;
+    const timer = setInterval(() => {
+      if (deadline.current === null) return;
+      const remaining = remainingSeconds(deadline.current, Date.now());
+      setSecondsLeft(remaining);
+      if (!remaining) endInterview();
+    }, 250);
+    return () => clearInterval(timer);
+  }, [active, mode]);
+
+  async function requestHint(): Promise<void> {
+    if (mode !== "practice" || !active || hintInFlight.current || closed.current) return;
+    const token = generation.current;
+    hintInFlight.current = true; setHintBusy(true);
+    try {
+      const data = await post<{ nudge: string }>("/api/hint", {
+        mode, history: messagesRef.current.filter(m => m.text.trim()).map(({ role, text }) => ({ role, text })),
+        coveredCategories: [...new Set(selected?.facts.filter(f => revealedRef.current.has(f.id)).map(f => f.category))],
+      }, controller().signal);
+      if (token === generation.current && !closed.current) setNudges(previous => [...previous, { nudge: data.nudge, at: new Date().toISOString() }]);
+    } catch (error) { if (token === generation.current && !closed.current) setHint(error instanceof Error ? error.message : "Hint unavailable."); }
+    finally { if (token === generation.current) { hintInFlight.current = false; setHintBusy(false); } }
+  }
+
+  function vivaCompleted(result: VivaResult): void {
+    setViva(result);
+    const session = reflectionRef.current;
+    if (session) saveSession({ ...session, viva: { score: result.score } });
   }
 
   function leaveVoice(): void {
@@ -367,7 +468,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
   function submitReflection(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     if (!concern.trim() || reflectionRef.current || !selected) return;
-    const result: SessionResult = { id: crypto.randomUUID(), caseId, personalityId, completedAt: new Date().toISOString(), reflection: { concern: concern.trim(), confidence } };
+    const result: SessionResult = { id: crypto.randomUUID(), caseId, personalityId, completedAt: new Date().toISOString(), mode, hintsUsed: nudges.length, elapsedMs: sessionTimes.current.elapsedMs, reflection: { concern: concern.trim(), confidence } };
     reflectionRef.current = result;
     setReflection(result);
     saveSession(result);
@@ -378,30 +479,31 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
   function downloadTranscript(): void {
     if (!selected) return;
     const personality = selected.personalities.find(p => p.id === personalityId);
-    const data = {
-      exportedAt: new Date().toISOString(),
-      app: "medBot",
-      engineMode: "openai",
+    const data = sessionRecord({
+      mode, timings: sessionTimes.current, hints: nudges, viva, disclosureEvents: disclosures,
+      coverage: [...new Set(selected.facts.map(f => f.category))].map(category => ({ category, total: selected.facts.filter(f => f.category === category).length, found: selected.facts.filter(f => f.category === category && revealed.has(f.id)).length })),
+      coachStatus: coach.status, guardPending,
+      sprint: mode === "sprint" ? sprintScore(selected.facts.filter(f => f.redFlag && revealed.has(f.id)).length, selected.redFlagCount, sessionTimes.current.elapsedMs) : null,
       case: { id: selected.id, title: selected.title, patient: selected.patient },
       personality: personality ?? { id: personalityId },
-      messages: messages.map(({ role, text: t }) => ({ role, text: t })),
-      revealedFactIds: [...revealed],
-      latencies: timings.map(({ kind, ms }) => ({ kind, ms: Math.round(ms) })),
-      guardWarnings: warnings,
+      messages: messages.map(({ id, role, text }) => ({ id, role, text })),
+      revealedFactIds: [...revealed], latencies: timings, guardWarnings: warnings,
       reflection: reflection?.reflection ?? null,
-      coachReport: coach.status === "ready" ? coach.report : null,
+      coach: coach.status === "ready" ? coach.report : null,
       anamnesis: anamnesis.status === "ready" ? anamnesis.report : null,
       anamnesisStatus: anamnesis.status,
-    };
+    });
     downloadJson(data, `medbot-${selected.id}-${new Date().toISOString().slice(0, 19).replaceAll(":", "-")}.json`);
   }
 
-  function startInterview(): void {
+  function beginVoice(): void {
     if (!selected || active || busy) return;
     const prepared = warmSelection(caseId, personalityId, true);
     prewarmed.current = null; // Ownership transfers to the running interview.
+    const readingStartedAt = reading ? new Date(reading.deadline - 60_000).toISOString() : null;
     clearInterview();
     startedAt.current = performance.now();
+    beginClock(readingStartedAt);
     setActive("voice");
     setStatus("Connecting");
     scrollTo(workspace.current);
@@ -409,7 +511,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     const client = new RealtimeInterview({
       onStatus: next => { if (token === generation.current) setStatus(next); },
       onMessage: (role, message, id) => {
-        if (token !== generation.current) return;
+        if (token !== generation.current || closed.current) return;
         addMessage({ role, text: message, id });
         if (role === "patient" && message.trim() && !patientSeen.current.has(id)) {
           patientSeen.current.add(id);
@@ -423,17 +525,17 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
             const index = messagesRef.current.findIndex(item => item.id === id);
             const preceding = messagesRef.current.slice(0, index);
             if (preceding.some(item => !item.text.trim())) setWarnings(previous => [...previous, { type: "incomplete transcript", detail: "A question was still transcribing when this reply was checked. Disclosure observations may be incomplete." }]);
-            void checkReply(message, preceding.filter(item => item.text.trim()).map(({ role: r, text: t }) => ({ role: r, text: t })), token);
+            void checkReply(message, preceding.filter(item => item.text.trim()).map(({ role: r, text: t }) => ({ role: r, text: t })), token, id);
           }, 500);
           guardTimers.current.add(timer);
         }
       },
-      onFact: id => { if (token === generation.current) disclose([id]); },
+      onFact: id => { if (token === generation.current && !closed.current) disclose([id]); },
       onLatency: ms => { if (token === generation.current) setTimings(previous => [...previous, { ms, kind: "voice" }]); },
       onLevel: (mic, patient) => { orb.current?.style.setProperty("--mic-level", mic.toFixed(3)); orb.current?.style.setProperty("--out-level", patient.toFixed(3)); },
       onError: message => { if (token === generation.current) setHint(message); },
       onDisconnect: () => {
-        if (token !== generation.current) return;
+        if (token !== generation.current || closed.current) return;
         voice.current = null;
         setActive("text");
         setStatus("Listening");
@@ -446,13 +548,12 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const question = text.trim();
-    if (!question || !selected || sending.current) return;
+    if (!question || !selected || sending.current || !active || closed.current || reading) return;
     if (active === "voice") {
       try { voice.current?.sendText(question); setText(""); }
       catch (error) { setHint(error instanceof Error ? error.message : "Please try again."); }
       return;
     }
-    if (ended) clearInterview();
     const token = generation.current;
     const history = messagesRef.current.filter(item => item.text.trim()).map(({ role, text: t }) => ({ role, text: t }));
     sending.current = true;
@@ -465,13 +566,14 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     const started = performance.now();
     try {
       const turn = await post<PatientTurn>("/api/chat", { caseId, personalityId, history, text: question }, controller().signal);
-      if (token !== generation.current) return;
+      if (token !== generation.current || closed.current) return;
       setTimings(previous => [...previous, { ms: performance.now() - started, kind: "text" }]);
-      addMessage({ id: crypto.randomUUID(), role: "patient", text: turn.reply });
-      disclose(turn.revealed);
-      void checkReply(turn.reply, [...history, { role: "student", text: question }], token);
+      const patientId = crypto.randomUUID();
+      addMessage({ id: patientId, role: "patient", text: turn.reply });
+      disclose(turn.revealed, patientId);
+      void checkReply(turn.reply, [...history, { role: "student", text: question }], token, patientId);
     } catch (error) {
-      if (token !== generation.current) return;
+      if (token !== generation.current || closed.current) return;
       messagesRef.current = messagesRef.current.filter(message => message.id !== studentId);
       setMessages(messagesRef.current);
       setText(question);
@@ -481,12 +583,13 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     }
   }
 
+  const vivaHistory = useMemo(() => messages.filter(m => m.text.trim()).map(({ role, text }) => ({ role, text })), [messages]);
   const timingKind = active === "voice" ? "voice" : timings.at(-1)?.kind ?? "text";
   const currentTimings = timings.filter(timing => timing.kind === timingKind).map(timing => timing.ms);
   const typical = median(currentTimings);
   const last = currentTimings.at(-1);
   const awaitingFeedback = ended && (!reflection || coach.status === "loading" || anamnesis.status === "loading");
-  const locked = Boolean(active) || busy || awaitingFeedback;
+  const locked = Boolean(reading) || Boolean(active) || busy || awaitingFeedback;
   const categories = [...new Set(selected?.facts.map(f => f.category) ?? [])];
   const badge = active === "text" ? "Text · OpenAI" : "Voice ready";
   const personality = selected?.personalities.find(p => p.id === personalityId);
@@ -497,7 +600,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
     ? ({ Connecting: "Connecting", Listening: "Listening", "Patient speaking": "Speaking", Thinking: "Thinking" } as const)[status]
     : busy ? "Thinking" : active === "text" ? "Ready" : ended ? "Finished" : "Not started";
   const stateTone = state === "Speaking" ? styles.toneSpeaking : state === "Thinking" || state === "Connecting" ? styles.toneBusy : state === "Listening" || state === "Ready" ? styles.toneLive : "";
-  const step = ended ? (reflection ? 3 : 2) : active || messages.length ? 1 : 0;
+  const step = ended ? (reflection ? 3 : 2) : reading || active || messages.length ? 1 : 0;
   const otherPersonalities = selected?.personalities.filter(p => p.id !== personalityId) ?? [];
   const recommendation = ended && reflection ? recommendNext(profile, cases, new Date().toISOString()) : null;
   const nextCase = cases.find(c => c.id === recommendation?.caseId);
@@ -512,6 +615,7 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
         <span className={styles.eyebrow}>Virtual interview patient</span>
         <h1 id="hero-title">Practise patient interviews out loud.</h1>
         <p>medBot plays a synthetic patient you question by voice or text. Afterwards a coach shows what you missed and picks your next patient.</p>
+        <fieldset className={styles.modePicker} disabled={locked}><legend>Choose your interview mode</legend><div className={styles.modeOptions}>{(Object.keys(interviewModes) as InterviewMode[]).map(key => <button key={key} type="button" className={mode === key ? styles.primary : styles.secondary} aria-pressed={mode === key} onClick={() => { clearInterview(); setMode(key); }}><strong>{interviewModes[key].label}</strong><small>{interviewModes[key].description}</small></button>)}</div></fieldset>
         {selected && <>
           <div className={styles.heroActions}>
             <button type="button" className={styles.primary} disabled={locked} onClick={startInterview}>Start voice interview with {patientFirst}</button>
@@ -541,8 +645,10 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
               <div className={styles.patientInfo}><strong>{selected.patient.name}</strong><span>{selected.patient.age} years · {selected.patient.job}{personality ? ` · ${personality.label}` : ""}</span></div>
               <span className={`${styles.state} ${stateTone}`} role="status"><span className={styles.stateDot} aria-hidden="true" />{state}</span>
             </div>}
+            {(reading || active) && <div className={styles.clock} role="timer" aria-label={reading ? "Reading time remaining" : "Interview time remaining"}><strong>{interviewModes[mode].label} · {reading ? "Reading time" : "Interview"}</strong><span>{secondsLeft === null ? "Untimed" : `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`}</span></div>}
+            {reading && selected && <section aria-labelledby="stem-title"><h3 id="stem-title">Station stem</h3><p>{selected.patient.name}, {selected.patient.age} years old, presents with {selected.title.toLowerCase()}.</p><p>Take a focused history, explore the patient’s perspective and identify safety concerns. The interview starts automatically after the full 60-second reading period.</p><button type="button" className={styles.secondary} onClick={clearInterview}>Cancel station</button></section>}
             <div className={styles.orbArea}>
-              <button ref={orb} type="button" className={orbClass} style={{ "--mic-level": 0, "--out-level": 0 } as CSSProperties} disabled={busy || awaitingFeedback} aria-label={active ? "End interview" : "Start interview"} onClick={toggleInterview}>
+              <button ref={orb} type="button" className={orbClass} style={{ "--mic-level": 0, "--out-level": 0 } as CSSProperties} disabled={Boolean(reading) || busy || awaitingFeedback} aria-label={active ? "End interview" : "Start interview"} onClick={toggleInterview}>
                 {active ? <span className={styles.stopIcon} /> : <svg width="34" height="42" viewBox="0 0 34 42" fill="none" aria-hidden="true"><rect x="10" y="2" width="14" height="25" rx="7" stroke="currentColor" strokeWidth="2.5" /><path d="M3 20v2a14 14 0 0 0 28 0v-2M17 36v5M11 41h12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /></svg>}
               </button>
               <strong className={styles.orbLabel}>{active ? "End interview" : ended ? "Start a new interview" : "Start voice interview"}</strong>
@@ -553,24 +659,26 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
               {last != null && <span className={styles.latency} title={timingKind === "voice" ? "From the last voiced microphone frame to first sustained patient track audio; excludes headset hardware delay" : "From submitting text to receiving the complete reply"}>{timingKind === "voice" ? "Voice felt" : "Text round trip"} · Last {duration(last, timingKind === "voice")} · Median {duration(typical, timingKind === "voice")}</span>}
             </div>
             {hint && <div className={`${styles.notice} ${styles.noticeWarn}`} role="status"><span>{hint}</span>{active === "text" && !messages.length && <button type="button" className={styles.ghost} onClick={startInterview}>Try voice again</button>}<button type="button" className={styles.ghost} onClick={() => setHint("")}>Dismiss</button></div>}
+            {nudges.length > 0 && <p className={styles.notice} role="status">Tutor: {nudges.at(-1)?.nudge} · {nudges.length} hint{nudges.length === 1 ? "" : "s"} used</p>}
             <div ref={transcript} className={styles.transcript} role="log" aria-label="Interview transcript" aria-live="polite" aria-relevant="additions">
               {!messages.length && <div className={styles.emptyTranscript}><p>“What brings you in today?”</p><small>A good place to begin. Start the voice interview and speak, or type below.</small></div>}
               {messages.map(message => <div key={message.id} className={`${styles.message} ${message.role === "student" ? styles.student : styles.patient}`}><span className={styles.speaker}>{message.role === "student" ? "You" : patientFirst}</span><p>{message.text || "Transcribing…"}</p></div>)}
               {busy && <p className={styles.thinking}>Patient is thinking…</p>}
             </div>
             <form className={styles.composer} onSubmit={event => void submit(event)}>
-              <label htmlFor="question" className="sr-only">Your question to the patient</label><input id="question" value={text} onChange={event => setText(event.target.value)} placeholder="Ask your patient a question…" maxLength={8000} autoComplete="off" disabled={busy || awaitingFeedback} />
-              <button type="submit" aria-label="Send question" disabled={!text.trim() || busy || awaitingFeedback || (active === "voice" && status !== "Listening")}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+              <label htmlFor="question" className="sr-only">Your question to the patient</label><input id="question" value={text} onChange={event => setText(event.target.value)} placeholder="Ask your patient a question…" maxLength={8000} autoComplete="off" disabled={!active || busy || awaitingFeedback || Boolean(reading)} />
+              <button type="submit" aria-label="Send question" disabled={!active || Boolean(reading) || !text.trim() || busy || awaitingFeedback || (active === "voice" && status !== "Listening")}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
             </form>
             <div className={styles.composerFoot}>
               <p className={styles.composerNote}>Text is always available. {active === "voice" ? "Typed questions use the same voice conversation." : "Press Enter to send."}</p>
-              <button type="button" className={styles.ghost} disabled={!messages.length} onClick={downloadTranscript}>Download transcript</button>
+              {mode === "practice" && active && <button type="button" className={styles.ghost} disabled={hintBusy} onClick={() => void requestHint()}>{hintBusy ? "Thinking…" : "Hint · −5 XP"}</button>}
+              <button type="button" className={styles.ghost} disabled={!messages.length} onClick={downloadTranscript}>Download session record</button>
             </div>
           </section>
           <aside className={styles.sidebar}>
             <section className={styles.card} aria-labelledby="goals-title"><h2 id="goals-title">This session</h2><ul className={styles.goals}>{goals.map(goal => <li key={goal}>{goal}</li>)}</ul><p className={styles.subtle}>{difficultyFor(profile) === "supported" ? "Retrieve first; use feedback to choose one thing to improve next." : "Practise independently, then identify your own gaps."}</p>{!persistent && <p role="status">Browser storage is unavailable. Learning progress lasts while this page stays open. Export before leaving.</p>}<button type="button" className={styles.learningExport} onClick={() => downloadJson(profile, "medbot-learning.json")}>Export learning JSON</button></section>
-            <section className={`${styles.card} ${styles.instructorCard}`}><label className={styles.toggle}><input type="checkbox" checked={instructor} disabled={awaitingFeedback} onChange={event => setInstructor(event.target.checked)} />Instructor view</label><span className={styles.chip}>For instructors and judges</span><p className={styles.subtle}>Shows the answer key: every fact the patient can disclose and the consistency check. Keep it off while practising.</p></section>
-            {(instructor && (!ended || reflection)) && <><section className={`${styles.card} ${styles.facts}`} aria-labelledby="facts-title"><div className={styles.sectionTitle}><h2 id="facts-title">Disclosed facts</h2><span className={styles.count}>{revealed.size}/{selected?.facts.length ?? 0}</span></div><p className={styles.subtle}>The patient reveals their story as you ask.</p><progress className={styles.progress} value={revealed.size} max={selected?.facts.length || 1} aria-label="Facts disclosed" />
+            <section className={`${styles.card} ${styles.instructorCard}`}><label className={styles.toggle}><input type="checkbox" checked={instructor} disabled={mode !== "practice" || (ended && !viva)} onChange={event => setInstructor(event.target.checked)} />Instructor view</label><span className={styles.chip}>For instructors and judges</span><p className={styles.subtle}>Shows the answer key: every fact the patient can disclose and the consistency check. Keep it off while practising.</p></section>
+            {(instructor && mode === "practice" && (!ended || viva)) && <><section className={`${styles.card} ${styles.facts}`} aria-labelledby="facts-title"><div className={styles.sectionTitle}><h2 id="facts-title">Disclosed facts</h2><span className={styles.count}>{revealed.size}/{selected?.facts.length ?? 0}</span></div><p className={styles.subtle}>The patient reveals their story as you ask.</p><progress className={styles.progress} value={revealed.size} max={selected?.facts.length || 1} aria-label="Facts disclosed" />
               {categories.map(category => <div className={styles.factGroup} key={category}><h3>{category}</h3><ul>{selected?.facts.filter(f => f.category === category).map(f => <li key={f.id} className={revealed.has(f.id) ? styles.disclosed : ""}><span className={styles.check} aria-hidden="true">{revealed.has(f.id) ? "✓" : ""}</span><span><span className="sr-only">{revealed.has(f.id) ? "Disclosed: " : "Not yet disclosed: "}</span>{f.lay}</span></li>)}</ul></div>)}
             </section>
             <section className={`${styles.card} ${styles.guard}`} aria-labelledby="guard-title"><div className={styles.sectionTitle}><h2 id="guard-title">Consistency check</h2></div><p className={styles.subtle}>{guardPending ? "Checking the latest replies…" : warnings.length ? "Review these observations after your interview." : "Observations will appear here as you talk."}</p>{warnings.length > 0 && <ul className={styles.warningList}>{warnings.map((warning, index) => <li key={index}><strong>{warning.type.replaceAll("_", " ")}</strong><span>{warning.detail}</span></li>)}</ul>}</section></>}
@@ -581,8 +689,11 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
           <form className={styles.reflection} onSubmit={submitReflection}><label htmlFor="concern">Main clinical concern<input id="concern" required maxLength={240} value={concern} onChange={event => setConcern(event.target.value)} /></label><label htmlFor="confidence">Confidence (1–5)<select id="confidence" value={confidence} onChange={event => setConfidence(Number(event.target.value))}>{[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}{n === 1 ? " · Very unsure" : n === 5 ? " · Very sure" : ""}</option>)}</select></label><button className={styles.secondary} type="submit" disabled={!concern.trim()}>Save reflection and see feedback</button></form>
         </section>}
         {ended && reflection && <section ref={feedback} className={`${styles.card} ${styles.summary}`} aria-labelledby="summary-title">
-          <div className={styles.summaryHead}><div><span className={styles.eyebrow}>Step 4 of 4 · Feedback</span><h2 id="summary-title">Every question builds the picture.</h2></div><button type="button" className={styles.secondary} disabled={!messages.length} onClick={downloadTranscript}>Download transcript</button></div>
+          <div className={styles.summaryHead}><div><span className={styles.eyebrow}>Step 4 of 4 · Feedback</span><h2 id="summary-title">Every question builds the picture.</h2></div><button type="button" className={styles.secondary} disabled={!messages.length} onClick={downloadTranscript}>Download session record</button></div>
           <p>Your concern: {reflection.reflection.concern} · Confidence {reflection.reflection.confidence}/5.</p>
+          {mode === "sprint" && selected && (() => { const score = sprintScore(selected.facts.filter(f => f.redFlag && revealed.has(f.id)).length, selected.redFlagCount, sessionTimes.current.elapsedMs); return <p><strong>Red flags: {score.found}/{score.total} · {score.score}%</strong> · Time bonus: +{score.timeBonus} XP (all red flags required)</p>; })()}
+          {coach.status === "ready" && <p>History coverage: {coach.report.score}/100. {!viva && "The answer key unlocks after your viva answer."}</p>}
+          {coach.status === "ready" && <VivaPanel key={reflection.id} caseId={caseId} history={vivaHistory} onResult={vivaCompleted} />}
           {reward && <RewardPanel reward={reward} />}
           <div className={styles.next} aria-labelledby="next-title">
             <h3 id="next-title">What next?</h3>
@@ -596,8 +707,13 @@ function ReadyInterview({ cases: initialCases }: { cases: InterviewCase[] }) {
             </>}
           </div>
           <div className={styles.summaryStats}><div><strong>{revealed.size}<small> / {selected?.facts.length}</small></strong><span>Facts covered</span></div><div><strong>{(selected?.facts.length ?? 0) - revealed.size}</strong><span>Still to explore</span></div><div><strong>{messages.filter(m => m.role === "patient").length}</strong><span>Patient turns</span></div>{(["voice", "text"] as const).map(kind => { const values = timings.filter(t => t.kind === kind).map(t => t.ms); return values.length ? <div key={kind}><strong>{duration(median(values))}</strong><span>Median {kind === "voice" ? "voice onset" : "text round trip"}</span></div> : null; })}</div>
+          {!viva && <p className={styles.subtle}>Detailed coach and documentation feedback are held until you answer the viva, so the case answer key does not guide your differential.</p>}
+          {viva && <><fieldset className={styles.modePicker}><legend>Feedback depth</legend><div className={styles.modeOptions}><button type="button" className={styles.secondary} aria-pressed={feedbackDepth === "brief"} onClick={() => setFeedbackDepth("brief")}>Brief</button><button type="button" className={styles.secondary} aria-pressed={feedbackDepth === "detailed"} onClick={() => setFeedbackDepth("detailed")}>Detailed + replay</button></div></fieldset>
+          {feedbackDepth === "brief" && coach.status === "ready" ? <><h3>One focus for next time</h3><p>{coach.report.improvements[0] ?? "Review your missed topics before repeating the station."}</p></> : <>
           <div className={styles.summaryPanels}><div className={styles.coachWrap}><h3>Coach report</h3><CoachPanel redFlagIds={new Set(selected?.facts.filter(f => f.redFlag).map(f => f.id))} state={coach} hasMessages={messages.some(m => m.text.trim())} onRetry={() => void loadCoach(generation.current)} /></div>
           <div className={styles.coachWrap}><h3>Anamnesis</h3><AnamnesisPanel state={anamnesis} onRetry={() => void loadAnamnesis(generation.current)} /></div></div>
+          {coach.status === "ready" && selected && <AnnotatedReplay messages={messages.filter(m => m.text.trim())} disclosures={disclosures} warnings={warnings} report={coach.report} facts={selected.facts} />}</>}</>}
+          {!viva && coach.status !== "ready" && <CoachPanel state={coach} hasMessages={messages.some(m => m.text.trim())} onRetry={() => void loadCoach(generation.current)} />}
         </section>}
       </>}
       {creating && <CaseCreator onClose={() => setCreating(false)} onCreated={c => { setCases(previous => [...previous.filter(item => item.id !== c.id), c]); chooseCase(c, false); setCreating(false); setHint("AI-generated synthetic patient created. Your patient is ready."); }} />}

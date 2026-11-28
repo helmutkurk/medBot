@@ -1,3 +1,4 @@
+import { sprintScore } from "./interview-mode.ts";
 import { communicationSkills } from "../case/types.ts";
 import type { LearnerProfile, ReviewItem, SessionResult } from "./learner.ts";
 
@@ -28,7 +29,7 @@ const time = (iso: string) => new Date(iso).getTime();
 
 // ---- XP ----------------------------------------------------------------------------------------------
 
-export interface XpBreakdown { base: number; coverage: number; redFlags: number; communication: number; calibration: number; total: number }
+export interface XpBreakdown { base: number; coverage: number; redFlags: number; communication: number; calibration: number; viva?: number; timeBonus?: number; hintPenalty?: number; total: number }
 export const reviewXp: Record<ReviewRating, number> = { again: 2, hard: 3, good: 5, easy: 6 };
 
 /** Performance in 0-1 used for calibration: mean of coach score and red-flag retrieval (as learner.ts). */
@@ -39,7 +40,11 @@ function performance(outcome: NonNullable<SessionResult["outcome"]>): number {
 export function sessionXp(session: SessionResult): XpBreakdown {
   const outcome = session.outcome;
   // A reflected interview without a coach report earns only the completion base.
-  if (!outcome) return { base: 10, coverage: 0, redFlags: 0, communication: 0, calibration: 0, total: 10 };
+  if (!outcome) {
+    const hintPenalty = Math.min(10, Math.max(0, Math.floor(session.hintsUsed ?? 0)) * 5);
+    const viva = Math.round(clamp((session.viva?.score ?? 0) / 100) * 20);
+    return { base: 10, coverage: 0, redFlags: 0, communication: 0, calibration: 0, ...(hintPenalty ? { hintPenalty } : {}), ...(viva ? { viva } : {}), total: 10 + viva - hintPenalty };
+  }
   const found = outcome.coverage.reduce((sum, row) => sum + row.found, 0);
   const total = outcome.coverage.reduce((sum, row) => sum + row.total, 0);
   const flagsFound = outcome.redFlags.filter(f => f.found).length;
@@ -52,7 +57,11 @@ export function sessionXp(session: SessionResult): XpBreakdown {
     communication: communicationSkills.reduce((sum, skill) => sum + Math.round(clamp(outcome.communication[skill], 0, 2) * 3), 0) ,
     calibration: Math.abs(confidence - performance(outcome)) <= .2 ? 15 : 0,
   };
-  return { ...parts, total: parts.base + parts.coverage + parts.redFlags + parts.communication + parts.calibration };
+  const subtotal = parts.base + parts.coverage + parts.redFlags + parts.communication + parts.calibration;
+  const hintPenalty = Math.min(subtotal, Math.max(0, Math.floor(session.hintsUsed ?? 0)) * 5);
+  const viva = Math.round(clamp((session.viva?.score ?? 0) / 100) * 20);
+  const timeBonus = session.mode === "sprint" ? sprintScore(flagsFound, outcome.redFlags.length, session.elapsedMs ?? 180_000).timeBonus : 0;
+  return { ...parts, ...(hintPenalty ? { hintPenalty } : {}), ...(viva ? { viva } : {}), ...(timeBonus ? { timeBonus } : {}), total: subtotal + viva + timeBonus - hintPenalty };
 }
 
 export const maxLevel = 50;

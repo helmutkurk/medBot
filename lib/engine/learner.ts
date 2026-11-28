@@ -1,4 +1,5 @@
 import type { CaseSummary, CommunicationSkill, FactCategory } from "../case/types.ts";
+import type { InterviewMode } from "./interview-mode.ts";
 import { communicationSkills } from "../case/types.ts";
 
 export const domains = ["complaint", "symptom", "history", "medication", "allergy", "family", "social", "lifestyle", "red_flags", "ice", ...communicationSkills] as const;
@@ -15,6 +16,11 @@ export interface SessionResult {
   personalityId: string;
   completedAt: string;
   reflection: Reflection;
+  mode?: InterviewMode;
+  hintsUsed?: number;
+  elapsedMs?: number;
+  viva?: { score: number };
+
   // Summaries only: no patient names, transcript or model evidence in local storage.
   outcome?: {
     score: number;

@@ -29,6 +29,9 @@ export function RewardPanel({ reward }: { reward: Reward }) {
       <h3 id="reward-title">+{xp.total} XP</h3>
       <ul className={styles.xpList}>
         <li>Interview completed <span>+{xp.base}</span></li>
+        {(xp.viva ?? 0) > 0 && <li>Viva reasoning <span>+{xp.viva}</span></li>}
+        {(xp.timeBonus ?? 0) > 0 && <li>Sprint time bonus <span>+{xp.timeBonus}</span></li>}
+        {(xp.hintPenalty ?? 0) > 0 && <li>Hints used <span>−{xp.hintPenalty}</span></li>}
         {xp.coverage > 0 && <li>History coverage <span>+{xp.coverage}</span></li>}
         {xp.redFlags > 0 && <li>Red flags found <span>+{xp.redFlags}</span></li>}
         {xp.communication > 0 && <li>Communication skills <span>+{xp.communication}</span></li>}
