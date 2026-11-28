@@ -14,6 +14,9 @@ Progress log: `docs/overnight-progress.md`. Read both after any context reset.
   everything with platform APIs (PWA manifest, service worker, Notifications, CSS, SVG).
 - Every prompt/case change: paired eval before acceptance; never accept more invented facts or less coverage.
 
+## Quota rule
+If an executor's quota runs out: wait with a timer if the reset is soon, otherwise hand the brief to the other provider (Sonnet ↔ Codex); re-check `creditos` before each launch.
+
 ## Executors and quota (check `vault_guard.py creditos` before each launch)
 - Codex `gpt-6.1-sol high` (`codex-encargo`) for code; resets 05:40, weekly 36 % → bulk of the night.
 - Claude Sonnet for code/research while Codex is out; Haiku for reading. Claude week 88 % until 10:59 → sparing.
@@ -31,6 +34,7 @@ Progress log: `docs/overnight-progress.md`. Read both after any context reset.
 | G | Competitor steal list → implement the top 2–3 that fit (after B) | Codex | per idea | each with acceptance |
 | H | Pitch ideas + rewrite pitch/demo/devpost around final features and numbers | Sonnet → Opus review | docs/event/* | ≤ 3 min script, all numbers bound to artifacts |
 | I | Final evidence: eval n ≥ 5 per cell, voice bench all cases | coordinator | eval/ | `/eval` updated |
+| K | Hosting for real feedback from doctor friends: Vercel (not GitHub Pages: app needs server routes + secret key). Access passcode, per-IP rate limit + daily spend cap, serverless-safe storage for leaderboard/traces (no new deps → Vercel env + fetch-based store or disable server-file features in hosted mode), privacy notice, in-app feedback form. Deploy itself waits for Helmut (his account) | Codex | lib/server/*, app/api/*, middleware/proxy, docs/deploy.md | `npm run check`, local prod run with HOSTED=1 |
 | J | UI review pass at 375/1280 px via browser screenshots; fix top issues | Sonnet | components/, app/ | screenshots in progress log |
 
 Order: A,B now · C,D at 05:40 · E,F next · G,H · I,J last. Helmut in the morning: voice audition, headset test,
