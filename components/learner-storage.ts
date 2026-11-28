@@ -1,6 +1,9 @@
 import { communicationSkills } from "../lib/case/types.ts";
 import { emptyProfile, updateProfile } from "../lib/engine/learner.ts";
 import type { LearnerProfile, SessionResult } from "../lib/engine/learner.ts";
+import { badgeById, emptyGame, maxReviewLog, reviewRatings, syncBadges } from "../lib/engine/gamification.ts";
+import type { GameState, ReviewLogEntry, ReviewRating } from "../lib/engine/gamification.ts";
+import { checkNickname } from "../lib/engine/nickname.ts";
 
 export const learnerStorageKey = "medbot.learner.v1";
 let memory = emptyProfile();
@@ -44,4 +47,57 @@ export function resetProfile(): boolean {
   unsaved = true;
   try { window.localStorage.removeItem(learnerStorageKey); unsaved = false; return true; }
   catch { return false; }
+}
+
+// ---- Game state (review ratings, badges, leaderboard nickname) -------------------------------------------
+// Separate versioned key so the learner profile format stays unchanged. XP, level and streak are never
+// stored: they are recomputed from sessions and review ratings, so they cannot drift or be edited into place.
+export const gameStorageKey = "medbot.game.v1";
+export const gameChangedEvent = "medbot:game-changed";
+let gameMemory = emptyGame();
+let gameUnsaved = false;
+const isoTime = (v: unknown): v is string => typeof v === "string" && v.length <= 40 && Number.isFinite(Date.parse(v));
+function reviewEntry(v: unknown): v is ReviewLogEntry {
+  return record(v) && isoTime(v.at) && text(v.caseId, 100) && text(v.factId, 100) && reviewRatings.includes(v.rating as ReviewRating);
+}
+/** Unknown versions are rejected; within version 1, malformed entries are dropped rather than trusted. */
+export function decodeGame(raw: string): GameState {
+  const value: unknown = JSON.parse(raw);
+  if (!record(value) || value.version !== 1) throw new Error("Unsupported game data.");
+  const nickname = checkNickname(value.nickname);
+  const badges: Record<string, string> = {};
+  if (record(value.badges)) for (const [id, at] of Object.entries(value.badges)) if (badgeById(id) && isoTime(at)) badges[id] = at;
+  const reviews = Array.isArray(value.reviews) ? value.reviews.filter(reviewEntry).map(({ at, caseId, factId, rating }) => ({ at, caseId, factId, rating })).slice(-maxReviewLog) : [];
+  return { version: 1, nickname: nickname.ok ? nickname.nickname : null, reviews, badges };
+}
+/**
+ * First run after this feature ships: learners with interviews but no game key get their earned badges
+ * recorded silently (no celebration) so history is honoured without replaying it as new unlocks.
+ */
+export function backfillGame(profile: LearnerProfile, game: GameState, now: string): GameState {
+  return syncBadges(profile, game, now).game;
+}
+export function loadGame(profile: LearnerProfile, now = new Date().toISOString()): { game: GameState; persistent: boolean } {
+  if (gameUnsaved) return { game: gameMemory, persistent: false };
+  try {
+    const raw = window.localStorage.getItem(gameStorageKey);
+    gameMemory = raw ? decodeGame(raw) : backfillGame(profile, emptyGame(), now);
+    return { game: gameMemory, persistent: true };
+  } catch { gameMemory = backfillGame(profile, emptyGame(), now); return { game: gameMemory, persistent: false }; }
+}
+export function persistGame(game: GameState): boolean {
+  gameMemory = game;
+  gameUnsaved = true;
+  let saved = false;
+  try { window.localStorage.setItem(gameStorageKey, JSON.stringify(game)); gameUnsaved = false; saved = true; } catch { /* kept in memory */ }
+  try { window.dispatchEvent(new Event(gameChangedEvent)); } catch { /* no window */ }
+  return saved;
+}
+export function resetGame(): boolean {
+  gameMemory = emptyGame();
+  gameUnsaved = true;
+  let saved = false;
+  try { window.localStorage.removeItem(gameStorageKey); gameUnsaved = false; saved = true; } catch { /* kept in memory */ }
+  try { window.dispatchEvent(new Event(gameChangedEvent)); } catch { /* no window */ }
+  return saved;
 }
