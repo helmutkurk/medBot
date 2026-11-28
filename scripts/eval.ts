@@ -1,10 +1,10 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ChatMessage, EngineOptions, GuardResult, PatientCase, Personality } from "../lib/case/types.ts";
 import { anamnesisReport, coachReport, guardTurn, listCases, loadCase, patientTurn } from "../lib/engine/index.ts";
 import { isRecord } from "../lib/case/validate.ts";
-import { DEFAULT_TEXT_MODEL, MissingApiKeyError, requestStructured } from "../lib/engine/openai.ts";
+import { DEFAULT_TEXT_MODEL, DEFAULT_PATIENT_MODEL, MissingApiKeyError, OpenAIError, requestStructured } from "../lib/engine/openai.ts";
 
 interface Arguments { n: number; turns: number; caseId?: string; personalityId?: string; md?: string }
 interface Metrics {
@@ -27,6 +27,10 @@ interface Run {
   transcript: ChatMessage[]; guards: GuardResult[]; revealedFactIds: string[];
   missedFactIds: string[]; latenciesMs: number[]; evaluationCyclesMs: number[];
   personalityGuess: string; personalityCorrect: boolean; metrics: Metrics;
+}
+interface FailedRun {
+  caseId: string; personalityId: string; run: number;
+  error: { kind: string; message: string };
 }
 
 function parseArguments(args: string[]): Arguments {
@@ -80,7 +84,7 @@ async function guessPersonality(c: PatientCase, history: ChatMessage[], opts: En
   return value.personality_id;
 }
 
-async function interview(c: PatientCase, p: Personality, run: number, turns: number, opts: EngineOptions): Promise<Run> {
+async function interview(c: PatientCase, p: Personality, run: number, turns: number, opts: EngineOptions, patientModel: string): Promise<Run> {
   opts = { ...opts, trace: { source: "eval", caseId: c.id, personalityId: p.id } };
   const transcript: ChatMessage[] = [];
   const guards: GuardResult[] = [];
@@ -91,7 +95,7 @@ async function interview(c: PatientCase, p: Personality, run: number, turns: num
   for (let turn = 0; turn < turns; turn++) {
     const cycleStart = performance.now();
     const question = await studentQuestion(c, transcript, turn, opts);
-    const response = await patientTurn(c, p, transcript, question, opts);
+    const response = await patientTurn(c, p, transcript, question, { ...opts, model: patientModel });
     transcript.push({ role: "student", text: question });
     const guard = await guardTurn(c, transcript, response.reply, opts);
     transcript.push({ role: "patient", text: response.reply });
@@ -125,15 +129,16 @@ async function interview(c: PatientCase, p: Personality, run: number, turns: num
 
 function aggregate(runs: Run[]): Metrics & { runs: number; personalityAccuracy: number } {
   const sum = (key: keyof Metrics) => runs.reduce((total, r) => total + r.metrics[key], 0);
+  const count = Math.max(1, runs.length);
   const latencies = runs.flatMap(r => r.latenciesMs);
   const cycles = runs.flatMap(r => r.evaluationCyclesMs);
   return {
-    runs: runs.length, factCoverage: sum("factCoverage") / runs.length, coachScore: sum("coachScore") / runs.length,
-    anamnesisCompleteness: sum("anamnesisCompleteness") / runs.length, redFlagsMissedRate: sum("redFlagsMissedRate") / runs.length,
+    runs: runs.length, factCoverage: sum("factCoverage") / count, coachScore: sum("coachScore") / count,
+    anamnesisCompleteness: sum("anamnesisCompleteness") / count, redFlagsMissedRate: sum("redFlagsMissedRate") / count,
     unpromptedDisclosures: sum("unpromptedDisclosures"), invented: sum("invented"), contradictions: sum("contradictions"), jargonHits: sum("jargonHits"), outOfCharacter: sum("outOfCharacter"),
     latencyP50Ms: percentile(latencies, 0.5), latencyP95Ms: percentile(latencies, 0.95),
     evaluationCycleP50Ms: percentile(cycles, 0.5), evaluationCycleP95Ms: percentile(cycles, 0.95),
-    personalityAccuracy: runs.filter(r => r.personalityCorrect).length / runs.length,
+    personalityAccuracy: runs.filter(r => r.personalityCorrect).length / count,
   };
 }
 
@@ -142,26 +147,42 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new MissingApiKeyError();
   const opts: EngineOptions = { apiKey, model: process.env.OPENAI_TEXT_MODEL?.trim() || DEFAULT_TEXT_MODEL };
+  const patientModel = process.env.OPENAI_PATIENT_MODEL?.trim() || DEFAULT_PATIENT_MODEL;
   const summaries = (await listCases()).filter(c => !config.caseId || c.id === config.caseId);
   if (!summaries.length) throw new Error("No cases matched the filter.");
   const runs: Run[] = [];
+  const failures: FailedRun[] = [];
+  const now = new Date().toISOString();
+  const directory = path.join(process.cwd(), "eval", "results");
+  const basename = path.join(directory, now.replaceAll(":", "-"));
+  const partial = `${basename}.partial.jsonl`;
+  const output = `${basename}.json`;
+  await mkdir(directory, { recursive: true });
+  await writeFile(partial, "", { flag: "wx", mode: 0o600 });
   for (const summary of summaries) {
     const c = await loadCase(summary.id);
     for (const p of c.personalities.filter(p => !config.personalityId || p.id === config.personalityId)) {
       for (let n = 1; n <= config.n; n++) {
         process.stderr.write(`Evaluating ${c.id}/${p.id} ${n}/${config.n} (openai)\n`);
-        runs.push(await interview(c, p, n, config.turns, opts));
+        let result: Run | FailedRun;
+        try {
+          result = await interview(c, p, n, config.turns, opts, patientModel);
+          runs.push(result);
+        } catch (error) {
+          result = { caseId: c.id, personalityId: p.id, run: n, error: error instanceof OpenAIError
+            ? { kind: error.kind, message: error.message }
+            : { kind: "unknown", message: "Interview failed unexpectedly." } };
+          failures.push(result);
+          process.stderr.write(`Interview failed (${result.error.kind}): ${c.id}/${p.id} ${n}/${config.n}\n`);
+        }
+        await appendFile(partial, JSON.stringify(result) + "\n");
       }
     }
   }
-  if (!runs.length) throw new Error("No personalities matched the filter.");
+  if (!runs.length && !failures.length) throw new Error("No personalities matched the filter.");
   const total = aggregate(runs);
-  const now = new Date().toISOString();
-  const directory = path.join(process.cwd(), "eval", "results");
-  const output = path.join(directory, `${now.replaceAll(":", "-")}.json`);
-  await mkdir(directory, { recursive: true });
-  await writeFile(output, JSON.stringify({ timestamp: now, model: opts.model, mode: "openai", config, runs, aggregate: total }, null, 2) + "\n", { flag: "wx" });
-  const mode = "Mode: openai";
+  await writeFile(output, JSON.stringify({ timestamp: now, model: opts.model, patientModel, textModel: opts.model, mode: "openai", config, runs, failures, aggregate: total }, null, 2) + "\n", { flag: "wx" });
+  const mode = `Mode: openai · patient model ${patientModel} · text model ${opts.model} · failures ${failures.length}`;
   const rows = ["| Case / personality / run | Coverage | Coach score | Anamnesis | Red flags missed | Unasked | Invented / conflict | Jargon | Role | Patient p50 / p95 ms | Label correct |", "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"];
   for (const r of runs) {
     const m = r.metrics;
@@ -177,18 +198,18 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     console.log(`Markdown summary: ${path.relative(process.cwd(), target)}`);
   }
   console.log(`Evaluation cycle p50 / p95: ${total.evaluationCycleP50Ms.toFixed(1)} / ${total.evaluationCycleP95Ms.toFixed(1)} ms (student + patient + guard).\nResults: ${path.relative(process.cwd(), output)}`);
-  if (total.invented + total.contradictions > 0) process.exitCode = 1;
+  if (!runs.length) process.exitCode = 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   main().catch(error => {
     if (error instanceof MissingApiKeyError) {
-      console.error(error.message);
+      console.error(`Evaluation failed (missing_api_key): ${error.message}`);
       process.exitCode = 2;
       return;
     }
     // Fail closed without dumping arbitrary error objects, request bodies or keys.
-    console.error("Evaluation failed. Check CLI filters, case validation and API availability; no success report was produced.");
-    process.exitCode = 1;
+    console.error(`Evaluation failed (${error instanceof OpenAIError ? error.kind : "unknown"}). Check CLI filters, case validation and API availability; completed interviews remain in the partial JSONL file if created.`);
+    process.exitCode = 2;
   });
 }

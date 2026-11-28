@@ -3,7 +3,7 @@ export { validateCase } from "../case/validate.ts";
 export { buildPatientInstructions, buildRevealFactTool, buildConsistencyMemo } from "../case/prompt.ts";
 export { patientTurn } from "./patient.ts";
 export { guardTurn, findJargon } from "./guard.ts";
-export { DEFAULT_TEXT_MODEL, MissingApiKeyError, OpenAIError } from "./openai.ts";
+export { DEFAULT_TEXT_MODEL, DEFAULT_PATIENT_MODEL, MissingApiKeyError, OpenAIError } from "./openai.ts";
 export { coachReport } from "./coach.ts";
 export type { CoachReport } from "./coach.ts";
 export { anamnesisReport } from "./anamnesis.ts";

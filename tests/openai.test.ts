@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { loadCase, getPersonality, patientTurn, guardTurn } from "../lib/engine/index.ts";
-import { DEFAULT_TEXT_MODEL, OpenAIError, requestStructured } from "../lib/engine/openai.ts";
+import { DEFAULT_TEXT_MODEL, DEFAULT_PATIENT_MODEL, OpenAIError, requestStructured } from "../lib/engine/openai.ts";
 
 function envelope(value: unknown): Response {
   return Response.json({ status: "completed", output: [{ type: "reasoning", summary: [] }, { type: "message", content: [{ type: "output_text", text: JSON.stringify(value) }] }] });
@@ -19,34 +19,75 @@ test("Responses request uses strict structured output and default or overridden 
     assert.equal(body.text.format.type, "json_schema");
     assert.equal(body.text.format.strict, true);
     assert.equal(body.store, false);
+    if (body.model === DEFAULT_TEXT_MODEL || body.model === "o3-mini") {
+      assert.deepEqual(body.reasoning, { effort: "low" });
+    } else {
+      assert.equal(Object.hasOwn(body, "reasoning"), false);
+    }
     models.push(body.model);
     return envelope({ value: "ok" });
   };
   try {
     assert.deepEqual(await requestStructured(request, opts), { value: "ok" });
+    assert.deepEqual(await requestStructured(request, { ...opts, model: DEFAULT_PATIENT_MODEL }), { value: "ok" });
+    await requestStructured(request, { ...opts, model: "o3-mini" });
     await requestStructured(request, { ...opts, model: "test-model" });
-    assert.deepEqual(models, [DEFAULT_TEXT_MODEL, "test-model"]);
+    assert.deepEqual(models, [DEFAULT_TEXT_MODEL, DEFAULT_PATIENT_MODEL, "o3-mini", "test-model"]);
   } finally { globalThis.fetch = original; }
 });
 
 test("429 and 5xx are retried once; authentication failures are not retried or echoed", async () => {
   const original = globalThis.fetch;
   try {
-    for (const status of [429, 503]) {
+    for (const status of [429, 500, 503]) {
       let calls = 0;
       globalThis.fetch = async () => ++calls === 1 ? new Response("private provider message", { status, headers: { "retry-after": "0" } }) : envelope({ ok: true });
       assert.deepEqual(await requestStructured(request, opts), { ok: true });
       assert.equal(calls, 2);
     }
+    for (const status of [400, 401]) {
+      let calls = 0;
+      globalThis.fetch = async () => { calls++; return new Response("private provider message", { status }); };
+      await assert.rejects(requestStructured(request, opts), error => error instanceof OpenAIError && error.status === status && !error.message.includes("private") && !error.message.includes(opts.apiKey));
+      assert.equal(calls, 1);
+    }
     let calls = 0;
-    globalThis.fetch = async () => { calls++; return new Response("private provider message", { status: 401 }); };
-    await assert.rejects(requestStructured(request, opts), error => error instanceof OpenAIError && error.status === 401 && !error.message.includes("private") && !error.message.includes(opts.apiKey));
-    assert.equal(calls, 1);
-    calls = 0;
     globalThis.fetch = async () => { calls++; return new Response("private", { status: 500, headers: { "retry-after": "0" } }); };
     await assert.rejects(requestStructured(request, opts), error => error instanceof OpenAIError && error.status === 500);
     assert.equal(calls, 2);
   } finally { globalThis.fetch = original; }
+});
+
+test("network failures and timeouts retry once with a fresh attempt deadline", async t => {
+  for (const kind of ["network", "timeout"]) {
+    let calls = 0;
+    t.mock.method(globalThis, "fetch", async (_url: unknown, init: RequestInit) => {
+      calls++;
+      assert.equal(init.signal?.aborted, false);
+      if (calls === 1) {
+        if (kind === "network") throw new TypeError("private network details");
+        return new Promise<Response>((_resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error("Test deadline exceeded")), 100);
+          init.signal?.addEventListener("abort", () => { clearTimeout(timer); reject(init.signal?.reason); }, { once: true });
+        });
+      }
+      return envelope({ ok: true });
+    });
+    assert.deepEqual(await requestStructured({ ...request, timeoutMs: 5 }, opts), { ok: true });
+    assert.equal(calls, 2);
+  }
+});
+
+test("cancellation during retry backoff stops before a second attempt", async t => {
+  const controller = new AbortController();
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    calls++;
+    setTimeout(() => controller.abort(), 10);
+    return new Response(null, { status: 429, headers: { "retry-after": "1" } });
+  });
+  await assert.rejects(requestStructured(request, { ...opts, signal: controller.signal }), error => error instanceof OpenAIError && error.kind === "aborted");
+  assert.equal(calls, 1);
 });
 
 test("timeouts, cancellation, refusal and malformed responses have typed errors", async () => {

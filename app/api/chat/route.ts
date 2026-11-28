@@ -1,5 +1,5 @@
 import { patientTurn } from "../../../lib/engine/index.ts";
-import { engineOptions } from "../../../lib/server/env.ts";
+import { engineOptions, getModels } from "../../../lib/server/env.ts";
 import { body, history, interviewFrom, json, requestSignal, route, string } from "../../../lib/server/http.ts";
 
 export const runtime = "nodejs";
@@ -10,6 +10,8 @@ export function POST(request: Request) {
     const messages = history(data.history);
     const text = string(data.text, "text");
     const { c, p } = await interviewFrom(data);
-    return json(await patientTurn(c, p, messages, text, engineOptions(requestSignal(request), "/api/chat")));
+    return json(await patientTurn(c, p, messages, text, {
+      ...engineOptions(requestSignal(request), "/api/chat"), model: getModels().patient,
+    }));
   });
 }

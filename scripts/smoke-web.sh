@@ -40,6 +40,7 @@ assert.equal(healthResponse.status, 200);
 const health = await healthResponse.json();
 assert.equal(health.ready, false);
 assert.ok(health.models.text);
+assert.ok(health.models.patient);
 const casesResponse = await fetch(`${base}/api/cases`);
 assert.equal(casesResponse.status, 200);
 const cases = await casesResponse.json();
