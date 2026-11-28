@@ -1,5 +1,8 @@
 import type { ChatMessage } from "../case/types.ts";
 import { CaseNotFoundError, getPersonality, loadCase, MissingApiKeyError, OpenAIError } from "../engine/index.ts";
+import { gateDecision, hosted } from "./hosted.ts";
+import { budgetFailure } from "./budget.ts";
+import { costsMoney } from "./limits.ts";
 
 export class HttpError extends Error {
   readonly status: number;
@@ -41,6 +44,14 @@ export function object(value: unknown): Record<string, unknown> {
 }
 
 export async function body(request: Request, maxBytes = 128_000): Promise<Record<string, unknown>> {
+  if (hosted()) {
+    const decision = await gateDecision(request);
+    if (decision !== "allow") throw new HttpError(decision === "setup" ? 503 : 401, "access_required", "Demo access is required. Open /access or contact the host.");
+    if (costsMoney(new URL(request.url).pathname, request.method)) {
+      const blocked = await budgetFailure();
+      if (blocked) throw new HttpError(blocked.status, blocked.code, blocked.message);
+    }
+  }
   const origin = request.headers.get("origin");
   if (origin && origin !== new URL(request.url).origin) throw new HttpError(403, "invalid_origin", "Requests must come from this application.");
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) throw new HttpError(415, "invalid_content_type", "Use application/json.");

@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { maxLevel, weekStart } from "../engine/gamification.ts";
 import { checkNickname, nicknameKey } from "../engine/nickname.ts";
 import { HttpError } from "./http.ts";
+import { ephemeralStorage } from "./storage.ts";
 
 /*
  * Opt-in weekly leaderboard. Stores exactly nickname + XP + level per week, in a git-ignored JSON file.
@@ -17,7 +18,11 @@ const weeksKept = 4;
 export interface Entry { nickname: string; xp: number; level: number; updatedAt: string }
 interface Store { version: 1; weeks: Record<string, Record<string, Entry>> }
 
-export const storePath = () => resolve(process.env.LEADERBOARD_FILE || "data/leaderboard.json");
+export const storePath = () => resolve(/* turbopackIgnore: true */ process.env.LEADERBOARD_FILE || "data/leaderboard.json");
+
+function requireLeaderboard(): void {
+  if (ephemeralStorage()) throw new HttpError(503, "leaderboard_disabled", "The shared leaderboard is unavailable on this hosted demo. Your learning progress stays in this browser.");
+}
 
 function exact(data: Record<string, unknown>, keys: string[]): void {
   const extra = Object.keys(data).filter(k => !keys.includes(k));
@@ -58,7 +63,7 @@ export const resetRateLimit = () => hits.clear();
 
 async function read(): Promise<Store> {
   try {
-    const value = JSON.parse(await readFile(storePath(), "utf8"));
+    const value = JSON.parse(await readFile(/* turbopackIgnore: true */ storePath(), "utf8"));
     if (value?.version === 1 && value.weeks && typeof value.weeks === "object") return value as Store;
   } catch { /* missing or corrupt: start empty */ }
   return { version: 1, weeks: {} };
@@ -85,6 +90,7 @@ export function ranked(entries: Entry[]): Entry[] {
 }
 export interface Board { week: string; total: number; entries: { rank: number; nickname: string; xp: number; level: number }[]; me: { rank: number; xp: number; level: number } | null }
 export async function board(nickname?: string, now = new Date().toISOString()): Promise<Board> {
+  requireLeaderboard();
   const week = weekStart(now);
   const all = ranked(Object.values((await read()).weeks[week] ?? {}));
   const row = (e: Entry, i: number) => ({ rank: i + 1, nickname: e.nickname, xp: e.xp, level: e.level });
@@ -93,6 +99,7 @@ export async function board(nickname?: string, now = new Date().toISOString()): 
 }
 export function submit(input: { nickname: string; xp: number; level: number }, now = new Date().toISOString()): Promise<Board> {
   return exclusive(async () => {
+    requireLeaderboard();
     const store = await read();
     const week = weekStart(now);
     const entries = store.weeks[week] ??= {};
@@ -105,6 +112,7 @@ export function submit(input: { nickname: string; xp: number; level: number }, n
 }
 export function remove(nickname: string): Promise<void> {
   return exclusive(async () => {
+    requireLeaderboard();
     const store = await read();
     const key = nicknameKey(nickname);
     let changed = false;

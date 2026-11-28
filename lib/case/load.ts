@@ -2,6 +2,8 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { CaseSummary, PatientCase, Personality } from "./types.ts";
 import { assertCase } from "./validate.ts";
+import { generatedCases, generatedDirectory } from "./generated.ts";
+import { ephemeralStorage } from "../server/storage.ts";
 
 export class CaseNotFoundError extends Error {
   readonly caseId: string;
@@ -13,12 +15,13 @@ export class CaseNotFoundError extends Error {
 }
 
 async function readCases(directory?: string): Promise<PatientCase[]> {
+  const ephemeral = directory === undefined && ephemeralStorage();
   // Keep production tracing scoped to cases; arbitrary directory overrides serve Node tests.
   const filesIn = (subdir: string) => directory === undefined
     ? readdir(path.join(process.cwd(), "cases", subdir))
     : readdir(/* turbopackIgnore: true */ path.join(/* turbopackIgnore: true */ directory, subdir));
   let generated: string[];
-  try { generated = (await filesIn("generated")).filter(file => file.endsWith(".json")).map(file => path.join("generated", file)); }
+  try { generated = ephemeral ? [] : (await filesIn("generated")).filter(file => file.endsWith(".json")).map(file => path.join("generated", file)); }
   catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     generated = [];
@@ -32,6 +35,20 @@ async function readCases(directory?: string): Promise<PatientCase[]> {
     try { assertCase(value); } catch (error) { throw new Error(`Cannot load ${file}`, { cause: error }); }
     return value;
   }));
+  if (ephemeral) {
+    const saved = new Map(generatedCases);
+    try {
+      for (const file of await readdir(/* turbopackIgnore: true */ generatedDirectory())) {
+        if (!file.endsWith(".json")) continue;
+        try {
+          const value: unknown = JSON.parse(await readFile(/* turbopackIgnore: true */ path.join(generatedDirectory(), file), "utf8"));
+          assertCase(value);
+          if (value.id.startsWith("gen-")) saved.set(value.id, value);
+        } catch { /* A partial or unavailable ephemeral file must not hide built-in cases. */ }
+      }
+    } catch { /* Use memory if /tmp is unavailable. */ }
+    cases.push(...saved.values());
+  }
   const ids = new Set<string>();
   for (const c of cases) {
     if (ids.has(c.id)) throw new Error(`Duplicate patient case id: ${c.id}`);

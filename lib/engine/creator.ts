@@ -4,6 +4,8 @@ import path from "node:path";
 import type { EngineOptions, PatientCase } from "../case/types.ts";
 import { assertCase, validateCase } from "../case/validate.ts";
 import { OpenAIError, requestStructured, requireApiKey } from "./openai.ts";
+import { ephemeralStorage } from "../server/storage.ts";
+import { generatedCases, generatedDirectory } from "../case/generated.ts";
 
 export interface CaseDraftInput {
   diagnosis: string;
@@ -67,15 +69,23 @@ export async function generateCase(input: CaseDraftInput, opts: EngineOptions): 
   throw new OpenAIError("invalid_response", "Generated case failed validation after two attempts.");
 }
 
-export async function saveGeneratedCase(c: PatientCase, directory = path.join(process.cwd(), "cases")): Promise<void> {
+export async function saveGeneratedCase(c: PatientCase, directory?: string): Promise<void> {
   assertCase(c);
   if (!c.id.startsWith("gen-")) throw new Error("Only generated case ids may be saved.");
-  const targetDir = path.join(directory, "generated");
-  await mkdir(targetDir, { recursive: true });
+  const ephemeral = directory === undefined && ephemeralStorage();
+  const targetDir = ephemeral ? generatedDirectory() : path.join(directory ?? path.join(process.cwd(), "cases"), "generated");
+  if (ephemeral) generatedCases.set(c.id, c);
   const target = path.join(targetDir, `${c.id}.json`);
   const content = JSON.stringify(c, null, 2) + "\n";
-  try { await writeFile(target, content, { flag: "wx" }); }
+  try {
+    await mkdir(targetDir, { recursive: true });
+    await writeFile(target, content, { flag: "wx" });
+  }
   catch (error) {
+    if (ephemeral) {
+      console.warn("Generated synthetic case retained in instance memory; ephemeral storage is unavailable or already contains this case.");
+      return;
+    }
     if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
     if (await readFile(target, "utf8") !== content) throw new Error("A different generated case already has this id.");
   }

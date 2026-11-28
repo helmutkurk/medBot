@@ -124,4 +124,4 @@ Must have: believable background story, English speech in and out, distinct pers
 
 ## Demo safety
 
-Use synthetic cases only; never enter real patient information. This is an education demo, not clinical advice. Use a headset, cap API spend and keep the text fallback and a backup recording ready. The app has no authentication or per-user quotas; keep this foundation local or behind access controls before sharing a funded deployment. Follow [AGENTS.md](AGENTS.md) for contribution rules.
+Use synthetic cases only; never enter real patient information. This is an education demo, not clinical advice. Use a headset, cap API spend and keep the text fallback and a backup recording ready. Before sharing a funded deployment, enable hosted mode with its shared passcode, signed cookie, rate limits and estimated daily spend cutoff. See [the Vercel deployment guide](docs/deploy.md) for configuration, ephemeral storage and instance-local limit caveats. Follow [AGENTS.md](AGENTS.md) for contribution rules.

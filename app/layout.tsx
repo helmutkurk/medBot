@@ -22,5 +22,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}<PwaClient /><MobileNav /></body></html>;
+  return <html lang="en"><body>{children}<footer className="demo-footer"><a href="/feedback">Send feedback</a><a href="/privacy">Privacy</a></footer><PwaClient /><MobileNav /></body></html>;
 }

@@ -1,8 +1,10 @@
-import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { TokenUsage } from "./pricing.ts";
+import { appendJsonLine, traceDirectory } from "../server/storage.ts";
+import { rememberUnstoredCost } from "../server/budget.ts";
+export { traceDirectory } from "../server/storage.ts";
 
-export const OPERATIONS = ["patient", "guard", "coach", "anamnesis", "creator", "student", "judge", "realtime"] as const;
+export const OPERATIONS = ["patient", "guard", "coach", "anamnesis", "creator", "student", "judge", "realtime", "hint", "viva"] as const;
 export interface TraceContext {
   operation: typeof OPERATIONS[number];
   route?: string;
@@ -43,10 +45,6 @@ export interface LlmTrace extends TokenUsage, Partial<RealtimeTurnTiming> {
   interrupted?: boolean;
 }
 
-export function traceDirectory(): string {
-  return process.env.MEDBOT_TRACE_DIR || path.join(process.cwd(), "traces");
-}
-
 // Project explicitly, so accidental extra properties cannot persist conversation text.
 export function traceFields(t: LlmTrace): LlmTrace {
   return {
@@ -64,17 +62,8 @@ export function traceFields(t: LlmTrace): LlmTrace {
     toolAckMs: t.toolAckMs, toolCallCount: t.toolCallCount,
   };
 }
-let warned = false;
 export async function recordTrace(t: LlmTrace): Promise<void> {
-  try {
-    const directory = traceDirectory();
-    const line = JSON.stringify(traceFields(t)) + "\n";
-    await mkdir(directory, { recursive: true });
-    await appendFile(path.join(directory, "llm.jsonl"), line, { mode: 0o600 });
-  } catch {
-    if (!warned) {
-      warned = true;
-      console.warn("LLM usage trace could not be saved; usage totals may be incomplete.");
-    }
-  }
+  const directory = traceDirectory();
+  const saved = await appendJsonLine(path.join(directory, "llm.jsonl"), traceFields(t));
+  if (!saved) rememberUnstoredCost(t, directory);
 }
