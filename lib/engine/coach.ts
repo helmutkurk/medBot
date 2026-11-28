@@ -113,11 +113,14 @@ export async function coachReport(c: PatientCase, history: ChatMessage[], reveal
     const rating = result.communication[skill];
     if (!isRecord(rating) || (rating.score !== 0 && rating.score !== 1 && rating.score !== 2)
       || typeof rating.evidence !== "string" || typeof rating.tip !== "string" || !rating.tip.trim()
-      || (rating.score > 0 && !rating.evidence.trim())
-      || (rating.evidence !== "" && (!rating.evidence.trim() || ![...studentTexts].some(t => t.includes(rating.evidence as string))))) {
+) {
       throw new OpenAIError("invalid_response", "Communication ratings require valid scores and exact student transcript evidence.");
     }
-    communication[skill] = { score: rating.score, evidence: rating.evidence, tip: rating.tip };
+    // Keep a quote only if it really occurs in the student's turns (tolerant of case, spacing and quote marks);
+    // an unverifiable quote is dropped instead of failing the whole report.
+    const norm = (t: string): string => t.toLowerCase().replace(/[\u2018\u2019\u201c\u201d"'`]/g, "").replace(/\s+/g, " ").trim();
+    const evidenceText = rating.evidence.trim() && [...studentTexts].some(t => norm(t).includes(norm(rating.evidence as string))) ? rating.evidence.trim() : "";
+    communication[skill] = { score: rating.score, evidence: evidenceText, tip: rating.tip };
   }
   return {
     mode: "openai", score: base.score, coverage: base.coverage,

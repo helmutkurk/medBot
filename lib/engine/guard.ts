@@ -31,6 +31,8 @@ export async function guardTurn(c: PatientCase, history: ChatMessage[], patientR
   const modelIssues: GuardResult["issues"] = [];
   for (const issue of result.issues) {
     if (!isRecord(issue) || !issueTypes.includes(issue.type as GuardIssueType) || typeof issue.detail !== "string") throw new OpenAIError("invalid_response", "Invalid guard issue structure.");
+    // The model sometimes emits placeholder issues ("None", ""): they name no concrete words, so they are not findings.
+    if (/^(none|n\/a|null|no issues?\.?)?$/i.test(issue.detail.trim())) continue;
     modelIssues.push({ type: issue.type as GuardIssueType, detail: issue.detail });
   }
   const normalize = (text: string): string => text.trim().toLowerCase().replace(/\s+/g, " ");

@@ -80,8 +80,16 @@ test("coach requests strict Calgary-Cambridge ratings and validates exact studen
   const report = await coachReport(chest, [{ role: "student", text: question }], [], opts, ["Explore ICE"]);
   assert.deepEqual(report.communication.ice_exploration, communication.ice_exploration);
   assert.equal(report.score, 0);
-  for (const invalid of [undefined, {}, { ...communication, empathy: { score: 3, evidence: "", tip: "Try" } }, { ...communication, empathy: { score: 1, evidence: "", tip: "Try" } }, { ...communication, empathy: { score: 1, evidence: "Invented", tip: "Try" } }, { ...communication, empathy: { score: 1, evidence: "Patient-only wording", tip: "Try" } }, { ...communication, empathy: { score: 0, evidence: "", tip: "" } }]) {
+  for (const invalid of [undefined, {}, { ...communication, empathy: { score: 3, evidence: "", tip: "Try" } }, { ...communication, empathy: { score: 0, evidence: "", tip: "" } }]) {
     t.mock.method(globalThis, "fetch", async () => envelope({ ...feedback, communication: invalid }));
     await assert.rejects(coachReport(chest, [{ role: "student", text: question }, { role: "patient", text: "Patient-only wording" }], [], opts), error => error instanceof OpenAIError && error.kind === "invalid_response");
   }
+  // Unverifiable or patient-side quotes are dropped rather than failing the whole report.
+  for (const evidence of ["", "Invented", "Patient-only wording"]) {
+    t.mock.method(globalThis, "fetch", async () => envelope({ ...feedback, communication: { ...communication, empathy: { score: 1, evidence, tip: "Try" } } }));
+    const kept = await coachReport(chest, [{ role: "student", text: question }, { role: "patient", text: "Patient-only wording" }], [], opts);
+    assert.equal(kept.communication.empathy.evidence, "");
+  }
+  t.mock.method(globalThis, "fetch", async () => envelope({ ...feedback, communication: { ...communication, ice_exploration: { score: 1, evidence: "  WORRIES   you most ", tip: "Ask" } } }));
+  assert.equal((await coachReport(chest, [{ role: "student", text: question }], [], opts)).communication.ice_exploration.evidence, "WORRIES   you most");
 });
