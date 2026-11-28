@@ -6,6 +6,7 @@ export function interviewCase(c: PatientCase) {
     personalities: c.personalities.map(({ id, label, voice }) => ({ id, label, voice })),
     factCount: c.facts.length,
     redFlagCount: c.facts.filter(f => f.red_flag).length,
-    facts: c.facts.map(({ id, category, lay, red_flag }) => ({ id, category, lay, redFlag: red_flag === true })),
+    // reveal_when is exposed for red flags only: the daily review cards show it as the model answer.
+    facts: c.facts.map(({ id, category, lay, red_flag, reveal_when }) => ({ id, category, lay, redFlag: red_flag === true, ...(red_flag ? { revealWhen: reveal_when } : {}) })),
   };
 }
